@@ -76,8 +76,8 @@ public CatalogoAlias() {
             "forma pago", "forma de pago");
     registrar("grupoPago", "grupo pago", "grupo de pago", "payment group");
     registrar("voucher", "voucher", "comprobante pago", "numero voucher");
-    registrar("diasVencimiento", "dias vencimiento", "dias vencido",
-            "dias de vencimiento", "dias a vencer", "days overdue");
+    registrar("diasVencimientoTexto", "dias vencimiento", "dias vencido", "dias de vencimiento", "dias a vencer",
+                    "days overdue");
 
     // Fechas auxiliares
     registrar("fechaRecepcion", "fecha recepcion", "fecha de recepcion",

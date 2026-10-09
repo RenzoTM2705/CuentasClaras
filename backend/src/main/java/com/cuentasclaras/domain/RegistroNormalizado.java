@@ -46,8 +46,8 @@ public class RegistroNormalizado {
     private String metodoPago;
     private String grupoPago;
     private String voucher;
-    private Integer diasVencimiento;
-
+    private String diasVencimientoTexto; // valor original del Excel (ej. "627 días vencido")
+    private Integer diasVencimientoCalculado; // calculado desde fechaVencimiento y fecha de corte
     // Campos adicionales detectados en los reportes reales
     private String cuentaAPagar;
     private BigDecimal saldoFuncionalPENHistorico;
@@ -264,12 +264,20 @@ public class RegistroNormalizado {
         this.voucher = voucher;
     }
 
-    public Integer getDiasVencimiento() {
-        return diasVencimiento;
+    public String getDiasVencimientoTexto() {
+        return diasVencimientoTexto;
     }
 
-    public void setDiasVencimiento(Integer diasVencimiento) {
-        this.diasVencimiento = diasVencimiento;
+    public void setDiasVencimientoTexto(String v) {
+        this.diasVencimientoTexto = v;
+    }
+
+    public Integer getDiasVencimientoCalculado() {
+        return diasVencimientoCalculado;
+    }
+
+    public void setDiasVencimientoCalculado(Integer v) {
+        this.diasVencimientoCalculado = v;
     }
 
     public String getCuentaAPagar() {
