@@ -90,7 +90,7 @@ public class NormalizadorFilas {
             case "metodoPago" -> r.setMetodoPago(texto(valor));
             case "grupoPago" -> r.setGrupoPago(texto(valor));
             case "voucher" -> r.setVoucher(texto(valor));
-            case "diasVencimiento" -> r.setDiasVencimiento(entero(valor));
+            case "diasVencimientoTexto" -> r.setDiasVencimientoTexto(texto(valor));
             case "cuentaAPagar" -> r.setCuentaAPagar(texto(valor));
             case "saldoFuncionalPENHistorico" -> r.setSaldoFuncionalPENHistorico(decimal(valor));
             case "fechaRecepcion" -> r.setFechaRecepcion(fecha(valor));

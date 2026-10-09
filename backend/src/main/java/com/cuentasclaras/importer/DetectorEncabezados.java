@@ -1,6 +1,7 @@
 package com.cuentasclaras.importer;
 
 import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.DataFormatter;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.springframework.stereotype.Component;
@@ -18,6 +19,7 @@ public class DetectorEncabezados {
 
     private static final int MAX_FILAS_INSPECCION = 20;
     private static final int MIN_COINCIDENCIAS_ACEPTABLE = 3;
+    private final DataFormatter formatter = new DataFormatter();
 
     private final CatalogoAlias catalogo;
 
@@ -44,10 +46,13 @@ public class DetectorEncabezados {
 
         for (int c = 0; c < fila.getLastCellNum(); c++) {
             Cell celda = fila.getCell(c);
-            if (celda == null) continue;
-            String valor = celda.getStringCellValue();
-            if (valor == null || valor.isBlank()) continue;
+            if (celda == null)
+                continue;
+            String valor = formatter.formatCellValue(celda).trim();
+            if (valor.isBlank())
+                continue;
             celdasNoVacias++;
+        
 
             String campo = catalogo.campoPara(valor);
             if (campo != null) {

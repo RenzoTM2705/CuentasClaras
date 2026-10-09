@@ -106,9 +106,11 @@ public class ImportadorService {
         } catch (Exception ex) {
             Advertencia w = new Advertencia(
                     "ARCHIVO_ILEGIBLE",
-                    "No se pudo leer el archivo: " + ex.getMessage());
+                    "No se pudo leer el archivo: " + ex.getClass().getSimpleName()
+                            + " - " + ex.getMessage());
             w.setArchivo(nombre);
             resultado.getAdvertencias().add(w);
+            ex.printStackTrace(); // para ver el stacktrace completo en consola
         }
     }
 
