@@ -1,51 +1,47 @@
 package com.cuentasclaras.controller;
 
-import com.cuentasclaras.domain.Advertencia;
-import com.cuentasclaras.domain.ResumenMonetario;
+import com.cuentasclaras.domain.ResultadoAnalisis;
 import com.cuentasclaras.domain.VistaGenerada;
-import com.cuentasclaras.dto.AnalisisRequest;
 import com.cuentasclaras.dto.AnalisisResponse;
+import com.cuentasclaras.importer.ImportadorService;
+import com.cuentasclaras.service.GeneradorVistasService;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
-import java.math.BigDecimal;
 import java.util.List;
 
 @RestController
 @RequestMapping("/api")
 public class AnalisisController {
 
-    /**
-     * Endpoint provisional. En Fase 2 devuelve datos simulados para validar el
-     * contrato de la API con el frontend. En Fase 3 se reemplazará por el
-     * procesamiento real de archivos Excel subidos.
-     */
-    @PostMapping("/analisis")
-    public ResponseEntity<AnalisisResponse> analizar(@RequestBody(required = false) AnalisisRequest request) {
+    private final ImportadorService importador;
+    private final GeneradorVistasService generadorVistas;
 
-        VistaGenerada consolidado = new VistaGenerada();
-        consolidado.setId("consolidado");
-        consolidado.setNombre("Consolidado");
-        consolidado.setTipo("consolidado");
-        consolidado.setTotalDocumentos(0);
-        consolidado.setColumnas(List.of());
-        consolidado.setFilas(List.of());
+    public AnalisisController(ImportadorService importador,
+            GeneradorVistasService generadorVistas) {
+        this.importador = importador;
+        this.generadorVistas = generadorVistas;
+    }
 
-        ResumenMonetario resumen = new ResumenMonetario();
-        resumen.setTotalPEN(BigDecimal.ZERO);
-        resumen.setTotalUSD(BigDecimal.ZERO);
-        consolidado.setResumen(resumen);
+    @PostMapping(value = "/analisis", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<AnalisisResponse> analizar(
+            @RequestParam("archivos") List<MultipartFile> archivos,
+            @RequestParam(value = "modo", defaultValue = "combinar") String modo) {
+        if (archivos == null || archivos.isEmpty()) {
+            return ResponseEntity.badRequest().build();
+        }
+
+        ResultadoAnalisis resultado = importador.importar(archivos);
+        List<VistaGenerada> vistas = generadorVistas.generar(resultado.getRegistros(), modo);
 
         AnalisisResponse response = new AnalisisResponse();
-        response.setTotalFilasLeidas(0);
-        response.setTotalRegistrosValidos(0);
-        response.setTotalRegistrosRechazados(0);
-        response.setVistas(List.of(consolidado));
-        response.setAdvertencias(List.of(
-                new Advertencia("FASE_2", "Endpoint provisional. El procesamiento real llega en Fase 3.")));
+        response.setTotalFilasLeidas(resultado.getTotalFilasLeidas());
+        response.setTotalRegistrosValidos(resultado.getTotalRegistrosValidos());
+        response.setTotalRegistrosRechazados(resultado.getTotalRegistrosRechazados());
+        response.setVistas(vistas);
+        response.setAdvertencias(resultado.getAdvertencias());
 
         return ResponseEntity.ok(response);
     }
