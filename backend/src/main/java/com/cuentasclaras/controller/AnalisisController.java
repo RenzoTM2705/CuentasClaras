@@ -42,7 +42,8 @@ public class AnalisisController {
         response.setTotalRegistrosRechazados(resultado.getTotalRegistrosRechazados());
         response.setVistas(vistas);
         response.setAdvertencias(resultado.getAdvertencias());
-
+        response.setResumenCombinacion(resultado.getResumenCombinacion());
+        
         return ResponseEntity.ok(response);
     }
 }

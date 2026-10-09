@@ -9,6 +9,7 @@ public class ResultadoAnalisis {
     private List<VistaGenerada> vistas = new ArrayList<>();
     private List<Advertencia> advertencias = new ArrayList<>();
 
+    private ResumenCombinacion resumenCombinacion;
     private int totalFilasLeidas;
     private int totalRegistrosValidos;
     private int totalRegistrosRechazados;
@@ -62,5 +63,13 @@ public class ResultadoAnalisis {
 
     public void setTotalRegistrosRechazados(int totalRegistrosRechazados) {
         this.totalRegistrosRechazados = totalRegistrosRechazados;
+    }
+
+    public ResumenCombinacion getResumenCombinacion() {
+        return resumenCombinacion;
+    }
+
+    public void setResumenCombinacion(ResumenCombinacion resumenCombinacion) {
+        this.resumenCombinacion = resumenCombinacion;
     }
 }

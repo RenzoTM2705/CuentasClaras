@@ -3,7 +3,9 @@ package com.cuentasclaras.importer;
 import com.cuentasclaras.domain.Advertencia;
 import com.cuentasclaras.domain.RegistroNormalizado;
 import com.cuentasclaras.domain.ResultadoAnalisis;
+import com.cuentasclaras.domain.ResumenCombinacion;
 import com.cuentasclaras.service.ClaveDocumentoService;
+import com.cuentasclaras.service.DeduplicacionService;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.ss.usermodel.WorkbookFactory;
@@ -12,9 +14,10 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.InputStream;
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Orquesta la importación de uno o varios Excel. Todo en memoria.
@@ -25,33 +28,47 @@ public class ImportadorService {
     private final NormalizadorFilas normalizador;
     private final DetectorEncabezados detector;
     private final ClaveDocumentoService claves;
+    private final DeduplicacionService deduplicacion;
 
     public ImportadorService(NormalizadorFilas normalizador,
             DetectorEncabezados detector,
-            ClaveDocumentoService claves) {
+            ClaveDocumentoService claves,
+            DeduplicacionService deduplicacion) {
         this.normalizador = normalizador;
         this.detector = detector;
         this.claves = claves;
+        this.deduplicacion = deduplicacion;
     }
 
     public ResultadoAnalisis importar(List<MultipartFile> archivos) {
         ResultadoAnalisis resultado = new ResultadoAnalisis();
         List<RegistroNormalizado> todos = new ArrayList<>();
 
+        // Detectar incompatibilidades estructurales entre archivos
+        List<String> advertenciasEstructurales = new ArrayList<>();
+        Map<String, Set<String>> columnasPorArchivo = new java.util.LinkedHashMap<>();
+
         for (MultipartFile archivo : archivos) {
-            procesarArchivo(archivo, resultado, todos);
+            procesarArchivo(archivo, resultado, todos, columnasPorArchivo);
         }
 
-        detectarDuplicados(todos, resultado);
+        // Comparar columnas entre archivos
+        detectarIncompatibilidades(columnasPorArchivo, advertenciasEstructurales, resultado);
+
+        // Deduplicación fina (no elimina, marca)
+        ResumenCombinacion resumen = deduplicacion.analizar(
+                todos, archivos.size(), advertenciasEstructurales);
 
         resultado.setRegistros(todos);
         resultado.setTotalRegistrosValidos(todos.size());
+        resultado.setResumenCombinacion(resumen);
         return resultado;
     }
 
     private void procesarArchivo(MultipartFile archivo,
             ResultadoAnalisis resultado,
-            List<RegistroNormalizado> acumulador) {
+            List<RegistroNormalizado> acumulador,
+            Map<String, Set<String>> columnasPorArchivo) {
         String nombre = archivo.getOriginalFilename();
         if (nombre == null)
             nombre = "sin_nombre";
@@ -61,6 +78,8 @@ public class ImportadorService {
 
             LectorExcel lector = new LectorExcel();
             lector.setWorkbook(wb);
+
+            Set<String> columnasDetectadas = new LinkedHashSet<>();
 
             for (int s = 0; s < wb.getNumberOfSheets(); s++) {
                 Sheet hoja = wb.getSheetAt(s);
@@ -73,6 +92,16 @@ public class ImportadorService {
                     Advertencia w = new Advertencia(
                             "ENCABEZADO_NO_DETECTADO",
                             "No se pudo detectar una fila de encabezados. Hoja omitida.");
+                    w.setArchivo(nombre);
+                    w.setHoja(hoja.getSheetName());
+                    resultado.getAdvertencias().add(w);
+                    continue;
+                }
+
+                if (det.mapeoColumnas().isEmpty()) {
+                    Advertencia w = new Advertencia(
+                            "HOJA_SIN_COLUMNAS_RECONOCIDAS",
+                            "La hoja no contiene ninguna columna reconocible del catálogo. Se omite.");
                     w.setArchivo(nombre);
                     w.setHoja(hoja.getSheetName());
                     resultado.getAdvertencias().add(w);
@@ -93,6 +122,12 @@ public class ImportadorService {
                 resultado.setTotalFilasLeidas(resultado.getTotalFilasLeidas() + filas.size());
 
                 for (Map<String, Object> fila : filas) {
+                    // Registrar columnas para detectar incompatibilidades
+                    for (String k : fila.keySet()) {
+                        if (!"__filaOrigen".equals(k))
+                            columnasDetectadas.add(k);
+                    }
+
                     NormalizadorFilas.ResultadoNormalizacion res = normalizador.normalizar(fila, nombre,
                             hoja.getSheetName());
                     resultado.getAdvertencias().addAll(res.advertencias());
@@ -103,6 +138,10 @@ public class ImportadorService {
                 }
             }
 
+            if (!columnasDetectadas.isEmpty()) {
+                columnasPorArchivo.put(nombre, columnasDetectadas);
+            }
+
         } catch (Exception ex) {
             Advertencia w = new Advertencia(
                     "ARCHIVO_ILEGIBLE",
@@ -110,26 +149,48 @@ public class ImportadorService {
                             + " - " + ex.getMessage());
             w.setArchivo(nombre);
             resultado.getAdvertencias().add(w);
-            ex.printStackTrace(); // para ver el stacktrace completo en consola
         }
     }
 
-    private void detectarDuplicados(List<RegistroNormalizado> registros, ResultadoAnalisis resultado) {
-        Map<String, Integer> conteo = new HashMap<>();
-        for (RegistroNormalizado r : registros) {
-            String clave = r.getClaveDocumento();
-            if (clave == null)
-                continue;
-            conteo.merge(clave, 1, Integer::sum);
-        }
+    /**
+     * Compara las columnas detectadas en cada archivo.
+     * Si dos archivos comparten muy pocas columnas, informarlo.
+     * No bloquea el procesamiento: solo añade advertencias.
+     */
+    private void detectarIncompatibilidades(Map<String, Set<String>> columnasPorArchivo,
+            List<String> advertenciasEstructurales,
+            ResultadoAnalisis resultado) {
+        if (columnasPorArchivo.size() < 2)
+            return;
 
-        for (Map.Entry<String, Integer> e : conteo.entrySet()) {
-            if (e.getValue() > 1) {
-                Advertencia w = new Advertencia(
-                        "DUPLICADO_POTENCIAL",
-                        "Se detectaron " + e.getValue() + " registros con la misma clave. " +
-                                "No se eliminan automáticamente; revísalos.");
-                resultado.getAdvertencias().add(w);
+        List<Map.Entry<String, Set<String>>> entries = new ArrayList<>(columnasPorArchivo.entrySet());
+
+        for (int i = 0; i < entries.size(); i++) {
+            for (int j = i + 1; j < entries.size(); j++) {
+                String a = entries.get(i).getKey();
+                String b = entries.get(j).getKey();
+                Set<String> colA = entries.get(i).getValue();
+                Set<String> colB = entries.get(j).getValue();
+
+                Set<String> interseccion = new java.util.HashSet<>(colA);
+                interseccion.retainAll(colB);
+
+                if (interseccion.isEmpty()) {
+                    String msg = "Los archivos '" + a + "' y '" + b
+                            + "' no comparten ninguna columna. Se combinarán igualmente, pero revisa el resultado.";
+                    advertenciasEstructurales.add(msg);
+                    Advertencia w = new Advertencia("ARCHIVOS_INCOMPATIBLES", msg);
+                    w.setArchivo(a);
+                    resultado.getAdvertencias().add(w);
+                } else if (interseccion.size() < 3) {
+                    String msg = "Los archivos '" + a + "' y '" + b
+                            + "' comparten solo " + interseccion.size()
+                            + " columnas. La combinación puede ser incompleta.";
+                    advertenciasEstructurales.add(msg);
+                    Advertencia w = new Advertencia("COMPATIBILIDAD_BAJA", msg);
+                    w.setArchivo(a);
+                    resultado.getAdvertencias().add(w);
+                }
             }
         }
     }

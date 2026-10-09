@@ -53,7 +53,7 @@ public class RegistroNormalizado {
     private BigDecimal saldoFuncionalPENHistorico;
     private LocalDate fechaRecepcion;
     private String numeroFacturaMaximo;
-
+    private MarcaDuplicado marcaDuplicado;
     // Clave calculada para deduplicación
     private String claveDocumento;
 
@@ -318,6 +318,14 @@ public class RegistroNormalizado {
 
     public void setClaveDocumento(String claveDocumento) {
         this.claveDocumento = claveDocumento;
+    }
+
+    public MarcaDuplicado getMarcaDuplicado() {
+        return marcaDuplicado;
+    }
+
+    public void setMarcaDuplicado(MarcaDuplicado marcaDuplicado) {
+        this.marcaDuplicado = marcaDuplicado;
     }
 
     public Map<String, Object> getValoresOriginales() {

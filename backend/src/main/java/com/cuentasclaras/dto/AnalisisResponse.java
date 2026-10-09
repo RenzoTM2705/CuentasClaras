@@ -1,6 +1,7 @@
 package com.cuentasclaras.dto;
 
 import com.cuentasclaras.domain.Advertencia;
+import com.cuentasclaras.domain.ResumenCombinacion;
 import com.cuentasclaras.domain.VistaGenerada;
 
 import java.util.List;
@@ -12,6 +13,7 @@ public class AnalisisResponse {
     private int totalRegistrosRechazados;
     private List<VistaGenerada> vistas;
     private List<Advertencia> advertencias;
+    private ResumenCombinacion resumenCombinacion;
 
     public AnalisisResponse() {
     }
@@ -54,5 +56,13 @@ public class AnalisisResponse {
 
     public void setAdvertencias(List<Advertencia> advertencias) {
         this.advertencias = advertencias;
+    }
+
+    public ResumenCombinacion getResumenCombinacion() {
+        return resumenCombinacion;
+    }
+
+    public void setResumenCombinacion(ResumenCombinacion r) {
+        this.resumenCombinacion = r;
     }
 }
