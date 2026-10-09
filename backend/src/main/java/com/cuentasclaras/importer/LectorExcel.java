@@ -18,8 +18,7 @@ public class LectorExcel {
     private final DataFormatter formatter = new DataFormatter();
     private FormulaEvaluator evaluator;
 
-    public LectorExcel() {
-    }
+    public LectorExcel() {}
 
     public void setWorkbook(Workbook workbook) {
         this.evaluator = workbook.getCreationHelper().createFormulaEvaluator();
@@ -27,25 +26,23 @@ public class LectorExcel {
 
     public List<Map<String, Object>> leerDesde(Sheet hoja, int filaEncabezado) {
         Row filaEnc = hoja.getRow(filaEncabezado);
-        if (filaEnc == null)
-            return List.of();
+        if (filaEnc == null) return List.of();
 
         Map<Integer, String> encabezados = new LinkedHashMap<>();
-        for (int c = filaEnc.getFirstCellNum(); c < filaEnc.getLastCellNum(); c++) {
-            Cell celda = filaEnc.getCell(c);
-            String valor = celda == null ? "" : formatter.formatCellValue(celda).trim();
-            if (!valor.isBlank()) {
-                encabezados.put(c, valor);
-            }
-        }
+for (int c = 0; c < filaEnc.getLastCellNum(); c++) {
+    Cell celda = filaEnc.getCell(c);
+    String valor = celda == null ? "" : formatter.formatCellValue(celda).trim();
+    if (!valor.isBlank()) {
+        encabezados.put(c, valor);
+    }
+}
 
         List<Map<String, Object>> filas = new ArrayList<>();
         int ultimaFila = hoja.getLastRowNum();
 
         for (int i = filaEncabezado + 1; i <= ultimaFila; i++) {
             Row fila = hoja.getRow(i);
-            if (fila == null)
-                continue;
+            if (fila == null) continue;
 
             Map<String, Object> valores = new LinkedHashMap<>();
             boolean tieneAlgo = false;
@@ -69,8 +66,7 @@ public class LectorExcel {
     }
 
     private Object valorDeCelda(Cell celda) {
-        if (celda == null)
-            return null;
+        if (celda == null) return null;
         return switch (celda.getCellType()) {
             case STRING -> celda.getStringCellValue();
             case NUMERIC -> DateUtil.isCellDateFormatted(celda)
@@ -78,11 +74,9 @@ public class LectorExcel {
                     : celda.getNumericCellValue();
             case BOOLEAN -> celda.getBooleanCellValue();
             case FORMULA -> {
-                if (evaluator == null)
-                    yield formatter.formatCellValue(celda);
+                if (evaluator == null) yield formatter.formatCellValue(celda);
                 CellValue v = evaluator.evaluate(celda);
-                if (v == null)
-                    yield null;
+                if (v == null) yield null;
                 yield switch (v.getCellType()) {
                     case STRING -> v.getStringValue();
                     case NUMERIC -> DateUtil.isCellDateFormatted(celda)

@@ -18,40 +18,75 @@ public class CatalogoAlias {
 
     private final Map<String, String> aliasACampo = new HashMap<>();
 
-    public CatalogoAlias() {
-        registrar("unidadOperativa", "unidad", "unidad operativa", "uo", "business unit");
+public CatalogoAlias() {
+    // Unidad operativa
+    registrar("unidadOperativa", "unidad", "unidad operativa", "uo", "business unit");
 
-        registrar("ruc", "ruc", "ruc proveedor", "tax id", "ruc del proveedor");
-        registrar("proveedor", "proveedor", "nombre del proveedor", "supplier", "razon social");
-        registrar("beneficiario", "beneficiario", "beneficiary");
+    // Proveedor
+    registrar("ruc", "ruc", "ruc proveedor", "tax id", "ruc del proveedor");
+    registrar("proveedor", "proveedor", "nombre del proveedor", "supplier", "razon social");
+    registrar("beneficiario", "beneficiario", "beneficiary");
 
-        registrar("tipoDocumento", "tipo doc", "tipo documento", "document type", "tipo de documento");
-        registrar("categoria", "categoria", "category");
-        registrar("numeroComprobante", "numero", "numero comprobante", "comprobante",
-                "nro doc", "nro documento", "invoice number", "documento");
+    // Documento
+    registrar("tipoDocumento", "tipo doc", "tipo documento", "tipo de documento",
+            "document type", "tipo doc.");
+    registrar("categoria", "categoria", "category");
+    registrar("numeroComprobante", "numero", "numero comprobante", "comprobante",
+            "comprobante documento", "nro doc", "nro documento", "numero documento",
+            "invoice number", "documento");
 
-        registrar("fechaEmision", "fecha emision", "fecha doc", "fecha documento", "issue date");
-        registrar("fechaContable", "fecha contable", "accounting date");
-        registrar("fechaVencimiento", "fecha vencimiento", "fecha venc", "due date", "vencimiento");
+    // Fechas
+    registrar("fechaEmision", "fecha emision", "fecha de emision",
+            "fecha doc", "fecha documento", "issue date");
+    registrar("fechaContable", "fecha contable", "accounting date");
+    registrar("fechaVencimiento", "fecha vencimiento", "fecha de vencimiento",
+            "fecha venc", "due date", "vencimiento");
 
-        registrar("moneda", "moneda", "currency", "mon");
-        registrar("importeOriginal", "importe", "importe original", "amount", "monto");
-        registrar("tipoCambio", "tipo cambio", "tc", "exchange rate", "tipo de cambio");
-        registrar("saldoMonedaIngresada", "saldo moneda ingresada", "saldo ingresado",
-                "saldo moneda", "saldo en moneda ingresada");
-        registrar("saldoFuncionalPEN", "saldo funcional", "saldo funcional pen",
-                "saldo pen funcional", "saldo funcional soles");
-        registrar("saldoUSD", "saldo usd", "saldo dolares", "saldo $", "saldo en dolares");
-        registrar("saldoPEN", "saldo pen", "saldo soles", "saldo s/", "saldo en soles");
+    // Moneda e importes
+    registrar("moneda", "moneda", "divisa", "currency", "mon");
+    registrar("importeOriginal", "importe", "importe original",
+            "importe moneda ingresada", "amount", "monto", "importe ingresado");
+    registrar("tipoCambio", "tipo cambio", "tipo de cambio", "tc", "exchange rate");
+    registrar("saldoMonedaIngresada", "saldo moneda ingresada", "saldo ingresado",
+            "saldo moneda", "saldo en moneda ingresada");
+    registrar("saldoFuncionalPEN", "saldo funcional", "saldo funcional pen",
+            "saldo en moneda funcional pen", "saldo pen funcional",
+            "saldo funcional soles");
+    registrar("saldoUSD", "saldo usd", "saldo dolares", "saldo $",
+            "saldo en dolares", "saldo moneda usd");
+    registrar("saldoPEN", "saldo pen", "saldo soles", "saldo s/",
+            "saldo en soles", "saldo moneda pen");
 
-        registrar("terminoPago", "termino pago", "condiciones pago", "condicion pago");
-        registrar("descripcion", "descripcion", "detalle", "description", "glosa");
-        registrar("metodoPago", "metodo pago", "forma pago", "forma de pago");
-        registrar("grupoPago", "grupo pago", "payment group");
-        registrar("voucher", "voucher", "comprobante pago", "numero voucher");
-        registrar("diasVencimiento", "dias vencimiento", "dias vencido", "dias de vencimiento",
-                "days overdue");
-    }
+    // Cuenta a pagar (financiero)
+    registrar("cuentaAPagar", "cuenta a pagar", "cuenta por pagar",
+            "cxp", "cuenta pago");
+
+    // Histórico: campo distinto, para NO confundir con el funcional actual
+    registrar("saldoFuncionalPENHistorico",
+            "saldo moneda funcional pen historico",
+            "saldo funcional pen historico",
+            "saldo funcional historico");
+
+    // Otros
+    registrar("terminoPago", "termino pago", "termino de pago",
+            "condiciones pago", "condicion pago", "condiciones de pago");
+    registrar("descripcion", "descripcion", "descripcion de pago",
+            "detalle", "description", "glosa");
+    registrar("metodoPago", "metodo pago", "metodo de pago",
+            "forma pago", "forma de pago");
+    registrar("grupoPago", "grupo pago", "grupo de pago", "payment group");
+    registrar("voucher", "voucher", "comprobante pago", "numero voucher");
+    registrar("diasVencimiento", "dias vencimiento", "dias vencido",
+            "dias de vencimiento", "dias a vencer", "days overdue");
+
+    // Fechas auxiliares
+    registrar("fechaRecepcion", "fecha recepcion", "fecha de recepcion",
+            "fecha recepcion del documento", "fecha de recepcion del documento");
+
+    // Número factura máximo (puede servir para análisis)
+    registrar("numeroFacturaMaximo", "numero factura maximo",
+            "numero factura max", "nro factura maximo");
+}
 
     private void registrar(String campo, String... alias) {
         for (String a : alias) {
