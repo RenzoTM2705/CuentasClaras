@@ -26,58 +26,84 @@ public class DetectorEncabezados {
     }
 
     public ResultadoDetector detectar(Sheet hoja) {
-        int ultimaFila = Math.min(hoja.getLastRowNum(), MAX_FILAS_INSPECCION - 1);
+    int ultimaFila = Math.min(hoja.getLastRowNum(), MAX_FILAS_INSPECCION - 1);
 
-        int mejorFila = -1;
-        int mejorPuntaje = 0;
-        int mejorCeldasNoVacias = 0;
-        Map<Integer, String> mejorMapeo = new HashMap<>();
+    int mejorFila = -1;
+    int mejorPuntaje = 0;
+    int mejorCeldasNoVacias = 0;
+    int mejorTiposDistintos = 0;
+    Map<Integer, String> mejorMapeo = new HashMap<>();
 
-        for (int i = 0; i <= ultimaFila; i++) {
-            Row fila = hoja.getRow(i);
-            if (fila == null)
-                continue;
+    for (int i = 0; i <= ultimaFila; i++) {
+        Row fila = hoja.getRow(i);
+        if (fila == null) continue;
 
-            Map<Integer, String> mapeo = new HashMap<>();
-            int coincidencias = 0;
-            int celdasNoVacias = 0;
+        Map<Integer, String> mapeo = new HashMap<>();
+        int coincidencias = 0;
+        int celdasNoVacias = 0;
 
-            for (int c = fila.getFirstCellNum(); c < fila.getLastCellNum(); c++) {
-                Cell celda = fila.getCell(c);
-                if (celda == null)
-                    continue;
-                String valor = celda.getStringCellValue();
-                if (valor == null || valor.isBlank())
-                    continue;
-                celdasNoVacias++;
+        for (int c = 0; c < fila.getLastCellNum(); c++) {
+            Cell celda = fila.getCell(c);
+            if (celda == null) continue;
+            String valor = celda.getStringCellValue();
+            if (valor == null || valor.isBlank()) continue;
+            celdasNoVacias++;
 
-                String campo = catalogo.campoPara(valor);
-                if (campo != null) {
-                    mapeo.put(c, campo);
-                    coincidencias++;
-                }
-            }
-
-            if (coincidencias > mejorPuntaje) {
-                mejorPuntaje = coincidencias;
-                mejorFila = i;
-                mejorCeldasNoVacias = celdasNoVacias;
-                mejorMapeo = mapeo;
+            String campo = catalogo.campoPara(valor);
+            if (campo != null) {
+                mapeo.put(c, campo);
+                coincidencias++;
             }
         }
 
-        Confianza confianza;
-        if (mejorPuntaje >= MIN_COINCIDENCIAS_ACEPTABLE
-                && mejorPuntaje >= Math.max(2, mejorCeldasNoVacias / 3)) {
-            confianza = Confianza.ALTA;
-        } else if (mejorPuntaje >= 2) {
-            confianza = Confianza.MEDIA;
-        } else {
-            confianza = Confianza.BAJA;
-        }
+        // Verifica que las 3 filas siguientes tengan tipos de dato variados
+        // (señal de que son datos, no más títulos)
+        int tiposDistintos = contarTiposDatos(hoja, i + 1, 3);
 
-        return new ResultadoDetector(mejorFila, mejorMapeo, mejorPuntaje, confianza);
+        // Puntaje compuesto: coincidencias pesan más, tipos variados confirman
+        int puntaje = coincidencias * 10 + tiposDistintos;
+
+        if (coincidencias > 0 && puntaje > mejorPuntaje) {
+            mejorPuntaje = puntaje;
+            mejorFila = i;
+            mejorCeldasNoVacias = celdasNoVacias;
+            mejorTiposDistintos = tiposDistintos;
+            mejorMapeo = mapeo;
+        }
     }
+
+    // Recalcular coincidencias reales del mejor
+    int coincidenciasReales = mejorMapeo.size();
+
+    Confianza confianza;
+    if (coincidenciasReales >= MIN_COINCIDENCIAS_ACEPTABLE
+            && coincidenciasReales >= Math.max(2, mejorCeldasNoVacias / 3)
+            && mejorTiposDistintos >= 2) {
+        confianza = Confianza.ALTA;
+    } else if (coincidenciasReales >= 2) {
+        confianza = Confianza.MEDIA;
+    } else {
+        confianza = Confianza.BAJA;
+    }
+
+    return new ResultadoDetector(mejorFila, mejorMapeo, coincidenciasReales, confianza);
+}
+
+private int contarTiposDatos(Sheet hoja, int desdeFila, int cuantasFilas) {
+    java.util.Set<org.apache.poi.ss.usermodel.CellType> tipos = new java.util.HashSet<>();
+    int hasta = Math.min(hoja.getLastRowNum(), desdeFila + cuantasFilas - 1);
+    for (int i = desdeFila; i <= hasta; i++) {
+        Row f = hoja.getRow(i);
+        if (f == null) continue;
+        for (int c = 0; c < f.getLastCellNum(); c++) {
+            Cell celda = f.getCell(c);
+            if (celda != null && celda.getCellType() != org.apache.poi.ss.usermodel.CellType.BLANK) {
+                tipos.add(celda.getCellType());
+            }
+        }
+    }
+    return tipos.size();
+}
 
     public enum Confianza {
         ALTA, MEDIA, BAJA

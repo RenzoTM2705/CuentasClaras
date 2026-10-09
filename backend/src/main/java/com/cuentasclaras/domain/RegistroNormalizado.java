@@ -48,6 +48,12 @@ public class RegistroNormalizado {
     private String voucher;
     private Integer diasVencimiento;
 
+    // Campos adicionales detectados en los reportes reales
+    private String cuentaAPagar;
+    private BigDecimal saldoFuncionalPENHistorico;
+    private LocalDate fechaRecepcion;
+    private String numeroFacturaMaximo;
+
     // Clave calculada para deduplicación
     private String claveDocumento;
 
@@ -264,6 +270,38 @@ public class RegistroNormalizado {
 
     public void setDiasVencimiento(Integer diasVencimiento) {
         this.diasVencimiento = diasVencimiento;
+    }
+
+    public String getCuentaAPagar() {
+        return cuentaAPagar;
+    }
+
+    public void setCuentaAPagar(String cuentaAPagar) {
+        this.cuentaAPagar = cuentaAPagar;
+    }
+
+    public BigDecimal getSaldoFuncionalPENHistorico() {
+        return saldoFuncionalPENHistorico;
+    }
+
+    public void setSaldoFuncionalPENHistorico(BigDecimal v) {
+        this.saldoFuncionalPENHistorico = v;
+    }
+
+    public LocalDate getFechaRecepcion() {
+        return fechaRecepcion;
+    }
+
+    public void setFechaRecepcion(LocalDate fechaRecepcion) {
+        this.fechaRecepcion = fechaRecepcion;
+    }
+
+    public String getNumeroFacturaMaximo() {
+        return numeroFacturaMaximo;
+    }
+
+    public void setNumeroFacturaMaximo(String numeroFacturaMaximo) {
+        this.numeroFacturaMaximo = numeroFacturaMaximo;
     }
 
     public String getClaveDocumento() {
