@@ -4,6 +4,8 @@ import com.cuentasclaras.domain.RegistroNormalizado;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.text.Normalizer;
+import java.util.Locale;
 
 /**
  * Reglas de moneda: PEN y USD nunca se suman. No se inventan tipos de cambio.
@@ -16,14 +18,20 @@ public class ReglasMonedaService {
     }
 
     public Moneda monedaDe(RegistroNormalizado r) {
+        if (r == null)
+            return Moneda.DESCONOCIDA;
         String m = r.getMoneda();
         if (m == null)
             return Moneda.DESCONOCIDA;
-        String n = m.trim().toUpperCase();
-        if (n.equals("PEN") || n.equals("SOLES") || n.equals("S/") || n.equals("S"))
+
+        String n = normalizar(m);
+        if (n.equals("pen") || n.equals("soles") || n.equals("s") || n.equals("s/")) {
             return Moneda.PEN;
-        if (n.equals("USD") || n.equals("DOLARES") || n.equals("$") || n.equals("US$"))
+        }
+        if (n.equals("usd") || n.equals("dolares") || n.equals("$") || n.equals("us$")
+                || n.equals("usd$") || n.equals("dolar")) {
             return Moneda.USD;
+        }
         return Moneda.DESCONOCIDA;
     }
 
@@ -49,5 +57,16 @@ public class ReglasMonedaService {
                 return v;
         }
         return null;
+    }
+
+    /**
+     * Normaliza una cadena: minúsculas, sin tildes, sin espacios extra.
+     */
+    private String normalizar(String s) {
+        if (s == null)
+            return "";
+        String sinTildes = Normalizer.normalize(s, Normalizer.Form.NFD)
+                .replaceAll("\\p{M}", "");
+        return sinTildes.toLowerCase(Locale.ROOT).trim();
     }
 }

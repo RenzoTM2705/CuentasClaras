@@ -31,9 +31,10 @@ public CatalogoAlias() {
     registrar("tipoDocumento", "tipo doc", "tipo documento", "tipo de documento",
             "document type", "tipo doc.");
     registrar("categoria", "categoria", "category");
-    registrar("numeroComprobante", "numero", "numero comprobante", "comprobante",
-            "comprobante documento", "nro doc", "nro documento", "numero documento",
-            "invoice number", "documento");
+    registrar("numeroComprobante", "numero", "numero comprobante", "numero de documento",
+                    "numero documento", "comprobante", "comprobante documento",
+                    "nro doc", "nro documento", "nro de documento",
+                    "invoice number", "documento");
 
     // Fechas
     registrar("fechaEmision", "fecha emision", "fecha de emision",
