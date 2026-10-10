@@ -95,9 +95,9 @@ export default function UploadPage({ onResultado }: Props) {
                         <div className="flex flex-col gap-2">
                             {(
                                 [
-                                    ['combinar', 'Combinar todos los archivos compatibles'],
-                                    ['independiente', 'Mostrar cada archivo de forma independiente'],
-                                    ['ambos', 'Mostrar archivos por separado y también un consolidado'],
+                                    ['combinar', 'Unificar todo en una sola vista'],
+                                    ['independiente', 'Separar por unidad operativa (o por archivo si no hay unidades)'],
+                                    ['ambos', 'Separar por unidad operativa y también mostrar todo unificado'],
                                 ] as [ModoAnalisis, string][]
                             ).map(([valor, etiqueta]) => (
                                 <label key={valor} className="flex items-center gap-3 text-sm text-slate-700">

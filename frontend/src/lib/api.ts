@@ -50,3 +50,13 @@ export async function obtenerVistaCompleta(
     }
     return res.json();
 }
+
+/** Utilidad: formatea un número como moneda. */
+export function formatearMoneda(valor: number, moneda: 'PEN' | 'USD'): string {
+    return new Intl.NumberFormat('es-PE', {
+        style: 'currency',
+        currency: moneda,
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+    }).format(valor);
+}

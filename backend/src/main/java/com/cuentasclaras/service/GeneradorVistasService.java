@@ -3,13 +3,14 @@ package com.cuentasclaras.service;
 import com.cuentasclaras.domain.RegistroNormalizado;
 import com.cuentasclaras.domain.ResumenMonetario;
 import com.cuentasclaras.domain.ResumenProveedor;
+import com.cuentasclaras.domain.VistaCompleta;
 import com.cuentasclaras.domain.VistaGenerada;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.util.*;
 import java.util.stream.Collectors;
-import com.cuentasclaras.domain.VistaCompleta;
+
 /**
  * Genera las vistas a partir de los registros normalizados.
  *
@@ -17,18 +18,24 @@ import com.cuentasclaras.domain.VistaCompleta;
  * Reglas de generación:
  * </p>
  * <ul>
- * <li>Si se sube <b>un solo archivo</b>: una única vista con el nombre del
- * archivo.</li>
- * <li>Varios archivos + combinar → una vista {@code Combinado}.</li>
- * <li>Varios archivos + independiente → una vista por archivo.</li>
- * <li>Varios archivos + ambos → una vista por archivo + {@code Combinado}.</li>
- * <li>No se generan vistas por unidad operativa.</li>
+ * <li><b>Un solo archivo, una sola unidad operativa</b> (o sin columna de
+ * unidad):
+ * una única vista con el nombre del archivo, sin importar el modo.</li>
+ * <li><b>Un solo archivo, varias unidades operativas</b>:
+ * <ul>
+ * <li>{@code combinar} → una vista con el nombre del archivo.</li>
+ * <li>{@code independiente} → una vista por unidad operativa.</li>
+ * <li>{@code ambos} → una vista por unidad + una vista combinada.</li>
  * </ul>
- *
- * <p>
- * La preview del mosaico se limita a {@value #MAX_FILAS_PREVIEW} filas.
- * La vista completa se sirve bajo demanda desde el controlador.
- * </p>
+ * </li>
+ * <li><b>Varios archivos</b>:
+ * <ul>
+ * <li>{@code combinar} → una vista {@code Combinado}.</li>
+ * <li>{@code independiente} → una vista por archivo.</li>
+ * <li>{@code ambos} → una vista por archivo + una {@code Combinado}.</li>
+ * </ul>
+ * </li>
+ * </ul>
  */
 @Service
 public class GeneradorVistasService {
@@ -50,12 +57,62 @@ public class GeneradorVistasService {
                 .filter(Objects::nonNull)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
 
-        if (archivos.size() <= 1) {
+        LinkedHashSet<String> unidades = registros.stream()
+                .map(RegistroNormalizado::getUnidadOperativa)
+                .filter(u -> u != null && !u.isBlank())
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+
+        boolean unSoloArchivo = archivos.size() <= 1;
+        boolean variasUnidadesEnUnArchivo = unSoloArchivo && unidades.size() > 1;
+
+        // Caso 1: un solo archivo con una sola unidad (o sin unidades)
+        if (unSoloArchivo && !variasUnidadesEnUnArchivo) {
             String nombreArchivo = archivos.isEmpty() ? "Sin archivo" : archivos.iterator().next();
             vistas.add(construir("archivo:" + nombreArchivo, nombreArchivo, "archivo", registros));
             return vistas;
         }
 
+        // Caso 2: un solo archivo con varias unidades operativas
+        if (variasUnidadesEnUnArchivo) {
+            boolean incluirUnidades = "independiente".equals(modo) || "ambos".equals(modo);
+            boolean incluirCombinado = "ambos".equals(modo);
+
+            if (incluirUnidades) {
+                Map<String, List<RegistroNormalizado>> porUnidad = registros.stream()
+                        .filter(r -> r.getUnidadOperativa() != null && !r.getUnidadOperativa().isBlank())
+                        .collect(Collectors.groupingBy(
+                                RegistroNormalizado::getUnidadOperativa,
+                                LinkedHashMap::new,
+                                Collectors.toList()));
+                for (Map.Entry<String, List<RegistroNormalizado>> e : porUnidad.entrySet()) {
+                    vistas.add(construir(
+                            "unidad:" + e.getKey(),
+                            "Unidad " + e.getKey(),
+                            "unidad",
+                            e.getValue()));
+                }
+            }
+
+            // Modo combinar → 1 vista con el nombre del archivo
+            // Modo ambos → 1 vista combinada adicional
+            if ("combinar".equals(modo) || incluirCombinado) {
+                String nombreArchivo = archivos.isEmpty() ? "Sin archivo" : archivos.iterator().next();
+                vistas.add(construir(
+                        "combinado",
+                        nombreArchivo + " (combinado)",
+                        "combinado",
+                        registros));
+            }
+
+            if (vistas.isEmpty()) {
+                String nombreArchivo = archivos.isEmpty() ? "Sin archivo" : archivos.iterator().next();
+                vistas.add(construir("archivo:" + nombreArchivo, nombreArchivo, "archivo", registros));
+            }
+
+            return vistas;
+        }
+
+        // Caso 3: varios archivos
         boolean incluirIndividuales = "independiente".equals(modo) || "ambos".equals(modo);
         boolean incluirCombinado = "combinar".equals(modo) || "ambos".equals(modo);
 
@@ -82,10 +139,6 @@ public class GeneradorVistasService {
         return vistas;
     }
 
-    /**
-     * Construye la vista completa (todas las filas) a partir de una vista
-     * del catálogo y los registros de la sesión.
-     */
     public VistaCompleta construirCompleta(VistaGenerada catalogo,
             List<RegistroNormalizado> registrosSesion) {
         List<RegistroNormalizado> seleccionados = seleccionarRegistros(catalogo, registrosSesion);
@@ -102,11 +155,19 @@ public class GeneradorVistasService {
         return v;
     }
 
+    /**
+     * Selecciona los registros que corresponden a la vista del catálogo:
+     * <ul>
+     * <li>{@code combinado} → todos.</li>
+     * <li>{@code archivo:nombre} → solo los del archivo.</li>
+     * <li>{@code unidad:PE_LOG} → solo los de esa unidad operativa.</li>
+     * </ul>
+     */
     private List<RegistroNormalizado> seleccionarRegistros(VistaGenerada catalogo,
             List<RegistroNormalizado> registros) {
-        if ("combinado".equals(catalogo.getTipo())) {
+        if ("combinado".equals(catalogo.getTipo()))
             return registros;
-        }
+
         if ("archivo".equals(catalogo.getTipo())) {
             String nombreArchivo = catalogo.getId().startsWith("archivo:")
                     ? catalogo.getId().substring("archivo:".length())
@@ -115,6 +176,16 @@ public class GeneradorVistasService {
                     .filter(r -> nombreArchivo.equals(r.getArchivoOrigen()))
                     .toList();
         }
+
+        if ("unidad".equals(catalogo.getTipo())) {
+            String unidad = catalogo.getId().startsWith("unidad:")
+                    ? catalogo.getId().substring("unidad:".length())
+                    : catalogo.getNombre().replace("Unidad ", "");
+            return registros.stream()
+                    .filter(r -> unidad.equals(r.getUnidadOperativa()))
+                    .toList();
+        }
+
         return registros;
     }
 
@@ -137,8 +208,6 @@ public class GeneradorVistasService {
         ResumenMonetario r = new ResumenMonetario();
         BigDecimal totalPEN = BigDecimal.ZERO;
         BigDecimal totalUSD = BigDecimal.ZERO;
-        BigDecimal totalFuncionalPEN = BigDecimal.ZERO;
-        int pendientes = 0;
 
         for (RegistroNormalizado reg : registros) {
             ReglasMonedaService.Moneda m = moneda.monedaDe(reg);
@@ -149,20 +218,10 @@ public class GeneradorVistasService {
             } else if (m == ReglasMonedaService.Moneda.USD && saldoOrig != null) {
                 totalUSD = totalUSD.add(saldoOrig);
             }
-
-            BigDecimal funcional = moneda.saldoFuncionalPEN(reg);
-            if (funcional != null) {
-                totalFuncionalPEN = totalFuncionalPEN.add(funcional);
-            }
-
-            if (moneda.equivalenciaPENPendiente(reg))
-                pendientes++;
         }
 
         r.setTotalPEN(totalPEN);
         r.setTotalUSD(totalUSD);
-        r.setTotalFuncionalPENConfirmado(totalFuncionalPEN);
-        r.setRegistrosConEquivalenciaPENPendiente(pendientes);
         return r;
     }
 
@@ -195,11 +254,6 @@ public class GeneradorVistasService {
                 rp.setTotalPEN(rp.getTotalPEN().add(saldoOrig));
             } else if (m == ReglasMonedaService.Moneda.USD && saldoOrig != null) {
                 rp.setTotalUSD(rp.getTotalUSD().add(saldoOrig));
-            }
-
-            if (moneda.equivalenciaPENPendiente(r)) {
-                rp.setRegistrosConEquivalenciaPENPendiente(
-                        rp.getRegistrosConEquivalenciaPENPendiente() + 1);
             }
         }
 
@@ -240,17 +294,15 @@ public class GeneradorVistasService {
     private List<List<Object>> previewFilas(List<RegistroNormalizado> registros) {
         List<List<Object>> filas = new ArrayList<>();
         int limite = Math.min(registros.size(), MAX_FILAS_PREVIEW);
-        for (int i = 0; i < limite; i++) {
+        for (int i = 0; i < limite; i++)
             filas.add(filaDe(registros.get(i)));
-        }
         return filas;
     }
 
     private List<List<Object>> filasCompletas(List<RegistroNormalizado> registros) {
         List<List<Object>> filas = new ArrayList<>(registros.size());
-        for (RegistroNormalizado r : registros) {
+        for (RegistroNormalizado r : registros)
             filas.add(filaDe(r));
-        }
         return filas;
     }
 

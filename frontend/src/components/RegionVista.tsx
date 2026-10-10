@@ -12,6 +12,9 @@ function identificadorDe(v: VistaGenerada): string {
     if (v.tipo === 'archivo') {
         return v.id.startsWith('archivo:') ? v.id.slice('archivo:'.length) : v.nombre;
     }
+    if (v.tipo === 'unidad') {
+        return v.id.startsWith('unidad:') ? v.id.slice('unidad:'.length) : v.nombre;
+    }
     return v.nombre;
 }
 
@@ -25,13 +28,14 @@ function construirSubtitulo(vista: VistaGenerada): string {
     if (vista.tipo === 'archivo') {
         return `Archivo individual · ${identificadorDe(vista)}`;
     }
-
+    if (vista.tipo === 'unidad') {
+        return `Unidad operativa · ${identificadorDe(vista)}`;
+    }
     if (vista.tipo === 'combinado') {
-        const unidades = extraerUnidadesOperativas(vista);
+        const unidades = vista.unidadesOperativas ?? [];
         if (unidades.length === 0) return 'Combinado';
         return `Combinado · ${unidades.join(' + ')}`;
     }
-
     return vista.nombre;
 }
 

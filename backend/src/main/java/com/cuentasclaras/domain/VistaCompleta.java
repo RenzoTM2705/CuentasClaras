@@ -4,8 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Vista con todas las filas, para servirse bajo demanda en GET
- * /api/vistas/{id}.
+ * Vista con todas las filas, para servirse bajo demanda.
  */
 public class VistaCompleta {
 
