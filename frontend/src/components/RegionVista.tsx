@@ -18,12 +18,6 @@ function identificadorDe(v: VistaGenerada): string {
     return v.nombre;
 }
 
-/**
- * Construye el subtítulo de cada región.
- *
- * - Vista individual: "Archivo individual · nombre.xlsx"
- * - Vista combinada: "Combinado · PE_LOG + PE_SUP" (unidades operativas detectadas)
- */
 function construirSubtitulo(vista: VistaGenerada): string {
     if (vista.tipo === 'archivo') {
         return `Archivo individual · ${identificadorDe(vista)}`;
@@ -37,32 +31,6 @@ function construirSubtitulo(vista: VistaGenerada): string {
         return `Combinado · ${unidades.join(' + ')}`;
     }
     return vista.nombre;
-}
-
-/**
- * Extrae las unidades operativas distintas presentes en la columna
- * correspondiente del preview. La columna se identifica por nombre
- * normalizado, así que buscamos "unidad operativa" o "unidad".
- */
-function extraerUnidadesOperativas(vista: VistaGenerada): string[] {
-    const idx = vista.columnas.findIndex((c) => {
-        const n = c
-            .toLowerCase()
-            .normalize('NFD')
-            .replace(/[\u0300-\u036f]/g, '')
-            .trim();
-        return n === 'unidad operativa' || n === 'unidad' || n === 'uo';
-    });
-
-    if (idx < 0) return [];
-
-    const set = new Set<string>();
-    for (const fila of vista.filas) {
-        const v = fila[idx];
-        if (v === null || v === undefined || v === '') continue;
-        set.add(String(v));
-    }
-    return Array.from(set).sort();
 }
 
 export default function RegionVista({ vista, onAmpliar }: Props) {
