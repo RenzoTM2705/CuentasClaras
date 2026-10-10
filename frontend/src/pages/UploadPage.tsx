@@ -1,26 +1,53 @@
 import { useEffect, useState } from 'react';
 import FileDropZone from '@/components/FileDropZone';
-import { checkHealth } from '@/lib/api';
+import { checkHealth, subirArchivos } from '@/lib/api';
+import type { AnalisisResponse, ModoAnalisis } from '@/types/analisis';
 
-type Status = 'checking' | 'online' | 'offline';
+type BackendStatus = 'checking' | 'online' | 'offline';
 
-export default function UploadPage() {
+interface Props {
+    onResultado: (r: AnalisisResponse) => void;
+}
+
+export default function UploadPage({ onResultado }: Props) {
     const [files, setFiles] = useState<File[]>([]);
-    const [status, setStatus] = useState<Status>('checking');
+    const [backendStatus, setBackendStatus] = useState<BackendStatus>('checking');
+    const [modo, setModo] = useState<ModoAnalisis>('combinar');
+    const [procesando, setProcesando] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
         checkHealth()
-            .then(() => setStatus('online'))
-            .catch(() => setStatus('offline'));
+            .then(() => setBackendStatus('online'))
+            .catch(() => setBackendStatus('offline'));
     }, []);
 
-    const addFiles = (newFiles: File[]) => {
+    const handleFilesSelected = (newFiles: File[]) => {
         setFiles((prev) => {
             const names = new Set(prev.map((f) => f.name));
             const merged = [...prev];
             for (const f of newFiles) if (!names.has(f.name)) merged.push(f);
             return merged;
         });
+        setError(null);
+    };
+
+    const removeFile = (name: string) => {
+        setFiles((prev) => prev.filter((f) => f.name !== name));
+    };
+
+    const procesar = async () => {
+        if (files.length === 0) return;
+        setProcesando(true);
+        setError(null);
+        try {
+            const resultado = await subirArchivos(files, modo);
+            onResultado(resultado);
+        } catch (e) {
+            setError(e instanceof Error ? e.message : 'Error desconocido al procesar');
+        } finally {
+            setProcesando(false);
+        }
     };
 
     return (
@@ -31,11 +58,11 @@ export default function UploadPage() {
                         CuentasClaras
                     </h1>
                     <p className="text-base text-slate-600">
-                        Sube uno o varios reportes Excel de cuentas por pagar.
+                        Sube uno o varios reportes Excel de cuentas por pagar para visualizarlos y consolidarlos.
                     </p>
                 </header>
 
-                <FileDropZone onFilesSelected={addFiles} />
+                <FileDropZone onFilesSelected={handleFilesSelected} />
 
                 {files.length > 0 && (
                     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -50,9 +77,8 @@ export default function UploadPage() {
                                 >
                                     <span className="truncate text-sm text-slate-800">{f.name}</span>
                                     <button
-                                        onClick={() =>
-                                            setFiles((prev) => prev.filter((x) => x.name !== f.name))
-                                        }
+                                        type="button"
+                                        onClick={() => removeFile(f.name)}
                                         className="ml-4 text-xs font-medium text-slate-500 hover:text-red-600"
                                     >
                                         Quitar
@@ -63,32 +89,59 @@ export default function UploadPage() {
                     </section>
                 )}
 
+                {files.length > 0 && (
+                    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                        <h2 className="mb-3 text-sm font-medium text-slate-700">Modo de procesamiento</h2>
+                        <div className="flex flex-col gap-2">
+                            {(
+                                [
+                                    ['combinar', 'Combinar todos los archivos compatibles'],
+                                    ['independiente', 'Mostrar cada archivo de forma independiente'],
+                                    ['ambos', 'Mostrar archivos por separado y también un consolidado'],
+                                ] as [ModoAnalisis, string][]
+                            ).map(([valor, etiqueta]) => (
+                                <label key={valor} className="flex items-center gap-3 text-sm text-slate-700">
+                                    <input
+                                        type="radio"
+                                        name="modo"
+                                        value={valor}
+                                        checked={modo === valor}
+                                        onChange={() => setModo(valor)}
+                                        className="h-4 w-4 accent-brand-600"
+                                    />
+                                    {etiqueta}
+                                </label>
+                            ))}
+                        </div>
+                    </section>
+                )}
+
                 <div className="flex flex-col items-center gap-3">
                     <button
-                        disabled={files.length === 0}
+                        type="button"
+                        onClick={procesar}
+                        disabled={files.length === 0 || procesando || backendStatus !== 'online'}
                         className="rounded-xl bg-brand-600 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-slate-300"
                     >
-                        Procesar archivos
+                        {procesando ? 'Procesando…' : 'Procesar archivos'}
                     </button>
-                    <p className="text-xs text-slate-500">
-                        El procesamiento real se implementará en la Fase 3.
-                    </p>
+                    {error && <p className="text-xs text-red-600">{error}</p>}
                 </div>
 
                 <footer className="pt-4 text-center text-xs">
                     <span
                         className={
-                            status === 'online'
+                            backendStatus === 'online'
                                 ? 'text-emerald-600'
-                                : status === 'offline'
+                                : backendStatus === 'offline'
                                     ? 'text-red-500'
                                     : 'text-slate-400'
                         }
                     >
                         ● Backend:{' '}
-                        {status === 'online'
+                        {backendStatus === 'online'
                             ? 'conectado'
-                            : status === 'offline'
+                            : backendStatus === 'offline'
                                 ? 'no disponible'
                                 : 'verificando…'}
                     </span>

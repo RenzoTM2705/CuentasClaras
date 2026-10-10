@@ -1,16 +1,30 @@
 package com.cuentasclaras.domain;
 
+import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Vista de análisis expuesta al frontend.
+ *
+ * <p>
+ * En el catálogo (respuesta de POST /api/analisis) solo se envían
+ * las primeras {@code filasPreview} filas. La vista completa se obtiene
+ * bajo demanda con GET /api/vistas/{id}.
+ * </p>
+ */
 public class VistaGenerada {
 
-    private String id; // identificador único de la vista
-    private String nombre; // nombre mostrado
-    private String tipo; // "consolidado", "unidad", "archivo", "proveedor"
+    private String id;
+    private String nombre;
+    private String tipo; // "archivo" o "combinado"
     private int totalDocumentos;
     private ResumenMonetario resumen;
-    private List<String> columnas; // encabezados tal como se mostrarán
-    private List<List<Object>> filas; // previsualización (limitada)
+    private List<ResumenProveedor> resumenPorProveedor = new ArrayList<>();
+    private List<String> unidadesOperativas = new ArrayList<>();
+    private List<String> columnas = new ArrayList<>();
+
+    /** Solo las primeras filas, para el mosaico. */
+    private List<List<Object>> filasPreview = new ArrayList<>();
 
     public VistaGenerada() {
     }
@@ -55,6 +69,22 @@ public class VistaGenerada {
         this.resumen = resumen;
     }
 
+    public List<ResumenProveedor> getResumenPorProveedor() {
+        return resumenPorProveedor;
+    }
+
+    public void setResumenPorProveedor(List<ResumenProveedor> r) {
+        this.resumenPorProveedor = r;
+    }
+
+    public List<String> getUnidadesOperativas() {
+        return unidadesOperativas;
+    }
+
+    public void setUnidadesOperativas(List<String> u) {
+        this.unidadesOperativas = u;
+    }
+
     public List<String> getColumnas() {
         return columnas;
     }
@@ -63,11 +93,11 @@ public class VistaGenerada {
         this.columnas = columnas;
     }
 
-    public List<List<Object>> getFilas() {
-        return filas;
+    public List<List<Object>> getFilasPreview() {
+        return filasPreview;
     }
 
-    public void setFilas(List<List<Object>> filas) {
-        this.filas = filas;
+    public void setFilasPreview(List<List<Object>> filasPreview) {
+        this.filasPreview = filasPreview;
     }
 }
