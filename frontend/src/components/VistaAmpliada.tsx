@@ -5,7 +5,7 @@ import IconoExcel from './IconoExcel';
 import FiltrosVista, { FILTROS_VACIOS, type Filtros } from './FiltrosVista';
 import TotalesAlPie from './TotalesAlPie';
 import TablaDetalle from './TablaDetalle';
-import { obtenerVistaCompleta } from '@/lib/api';
+import { obtenerVistaCompleta, exportarVista } from '@/lib/api';
 import type { VistaCompleta, VistaGenerada } from '@/types/analisis';
 
 interface Props {
@@ -26,6 +26,8 @@ export default function VistaAmpliada({ sessionId, vista, onCerrar }: Props) {
     const [cargando, setCargando] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [filtros, setFiltros] = useState<Filtros>(FILTROS_VACIOS);
+    const [exportando, setExportando] = useState(false);
+    const [errorExport, setErrorExport] = useState<string | null>(null);
 
     // Cerrar con Escape
     useEffect(() => {
@@ -93,7 +95,6 @@ export default function VistaAmpliada({ sessionId, vista, onCerrar }: Props) {
         for (let i = 0; i < completa.filas.length; i++) {
             const fila = completa.filas[i];
 
-            // Filtro proveedor/RUC
             if (filtros.proveedor.trim()) {
                 const q = filtros.proveedor.toLowerCase().trim();
                 const prov = idxProveedor >= 0 ? String(fila[idxProveedor] ?? '').toLowerCase() : '';
@@ -101,13 +102,11 @@ export default function VistaAmpliada({ sessionId, vista, onCerrar }: Props) {
                 if (!prov.includes(q) && !ruc.includes(q)) continue;
             }
 
-            // Filtro unidad
             if (filtros.unidades.length > 0) {
                 const u = idxUnidad >= 0 ? String(fila[idxUnidad] ?? '') : '';
                 if (!filtros.unidades.includes(u)) continue;
             }
 
-            // Filtro moneda
             if (filtros.monedas.length > 0) {
                 const m = idxMoneda >= 0 ? String(fila[idxMoneda] ?? '').toUpperCase() : '';
                 if (!filtros.monedas.includes(m as 'PEN' | 'USD')) continue;
@@ -118,7 +117,6 @@ export default function VistaAmpliada({ sessionId, vista, onCerrar }: Props) {
         return idxs;
     }, [completa, filtros, idxProveedor, idxRuc, idxUnidad, idxMoneda]);
 
-    // Filas visibles
     const filasVisibles = useMemo(() => {
         if (!completa) return [];
         return filasFiltradas.map((i) => completa.filas[i]);
@@ -159,6 +157,28 @@ export default function VistaAmpliada({ sessionId, vista, onCerrar }: Props) {
         idxSaldoPEN,
     ]);
 
+    const handleExportar = async () => {
+        if (!completa) return;
+        setExportando(true);
+        setErrorExport(null);
+        try {
+            await exportarVista(
+                sessionId,
+                vista.id,
+                {
+                    proveedor: filtros.proveedor,
+                    unidades: filtros.unidades,
+                    monedas: filtros.monedas,
+                },
+                `${completa.nombre}.xlsx`,
+            );
+        } catch (e) {
+            setErrorExport(e instanceof Error ? e.message : 'Error al exportar');
+        } finally {
+            setExportando(false);
+        }
+    };
+
     return (
         <div className="fixed inset-0 z-40 flex flex-col bg-slate-50">
             <header className="flex shrink-0 items-center gap-4 border-b border-slate-200 bg-white px-6 py-3">
@@ -182,7 +202,25 @@ export default function VistaAmpliada({ sessionId, vista, onCerrar }: Props) {
                         </div>
                     </div>
                 </div>
+
+                <button
+                    type="button"
+                    onClick={handleExportar}
+                    disabled={cargando || !completa || exportando}
+                    className="flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-4 w-4">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+                    </svg>
+                    {exportando ? 'Exportando…' : 'Exportar a Excel'}
+                </button>
             </header>
+
+            {errorExport && (
+                <div className="shrink-0 border-b border-red-100 bg-red-50 px-6 py-2 text-xs text-red-700">
+                    {errorExport}
+                </div>
+            )}
 
             <div className="min-h-0 flex-1 overflow-auto">
                 {error ? (

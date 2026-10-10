@@ -12,6 +12,12 @@ export interface HealthResponse {
     timestamp: string;
 }
 
+export interface FiltrosExportacion {
+    proveedor?: string;
+    unidades?: string[];
+    monedas?: ('PEN' | 'USD')[];
+}
+
 export async function checkHealth(): Promise<HealthResponse> {
     const res = await fetch(`${API_BASE_URL}/api/health`);
     if (!res.ok) throw new Error(`Health check falló: ${res.status}`);
@@ -49,6 +55,49 @@ export async function obtenerVistaCompleta(
         throw new Error(`Error al obtener vista completa: ${res.status} ${texto}`);
     }
     return res.json();
+}
+
+/**
+ * Descarga el .xlsx de una vista aplicando los filtros indicados.
+ * El navegador inicia la descarga automáticamente.
+ */
+export async function exportarVista(
+    sessionId: string,
+    vistaId: string,
+    filtros: FiltrosExportacion = {},
+    nombreSugerido = 'vista.xlsx',
+): Promise<void> {
+    const url = `${API_BASE_URL}/api/sesiones/${encodeURIComponent(sessionId)}/vistas/${encodeURIComponent(vistaId)}/exportar`;
+
+    const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(filtros),
+    });
+
+    if (!res.ok) {
+        const texto = await res.text().catch(() => '');
+        throw new Error(`Error al exportar: ${res.status} ${texto}`);
+    }
+
+    const blob = await res.blob();
+
+    // Intentar obtener el nombre del header Content-Disposition
+    let nombre = nombreSugerido;
+    const cd = res.headers.get('Content-Disposition');
+    if (cd) {
+        const match = cd.match(/filename="?([^";]+)"?/);
+        if (match && match[1]) nombre = match[1];
+    }
+
+    const urlBlob = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = urlBlob;
+    a.download = nombre;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(urlBlob);
 }
 
 /** Utilidad: formatea un número como moneda. */
