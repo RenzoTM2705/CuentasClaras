@@ -62,17 +62,16 @@ public class AnalisisController {
             @PathVariable String sessionId,
             @PathVariable String vistaId) {
         Optional<SesionAnalisis> sesionOpt = sesiones.obtener(sessionId);
-        if (sesionOpt.isEmpty()) {
+        if (sesionOpt.isEmpty())
             return ResponseEntity.notFound().build();
-        }
+
         SesionAnalisis sesion = sesionOpt.get();
 
         Optional<VistaGenerada> vistaOpt = sesion.getVistas().stream()
                 .filter(v -> v.getId().equals(vistaId))
                 .findFirst();
-        if (vistaOpt.isEmpty()) {
+        if (vistaOpt.isEmpty())
             return ResponseEntity.notFound().build();
-        }
 
         VistaCompleta completa = generadorVistas.construirCompleta(
                 vistaOpt.get(), sesion.getRegistros());
