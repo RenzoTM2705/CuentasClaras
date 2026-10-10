@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: cuentasclaras-backend
+    env: java
+    plan: free
+    region: oregon
+    buildCommand: mvn clean package -DskipTests
+    startCommand: java -jar target/cuentasclaras-backend-0.1.0.jar
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false
+      - key: MAX_UPLOAD_SIZE_MB
+        value: 50

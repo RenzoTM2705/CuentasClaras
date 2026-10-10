@@ -1,0 +1,17 @@
+node_modules/
+target/
+*.jar
+dist/
+build/
+out/
+.env
+.env.local
+.env.*.local
+!.env.example
+.idea/
+.vscode/
+*.iml
+.DS_Store
+*.log
+uploads/
+tmp/
