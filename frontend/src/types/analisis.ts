@@ -25,7 +25,7 @@ export interface ResumenProveedor {
 export interface VistaGenerada {
     id: string;
     nombre: string;
-    tipo: 'archivo' | 'combinado';
+    tipo: 'archivo' | 'unidad' | 'combinado';
     totalDocumentos: number;
     resumen: ResumenMonetario;
     resumenPorProveedor: ResumenProveedor[];
@@ -37,7 +37,7 @@ export interface VistaGenerada {
 export interface VistaCompleta {
     id: string;
     nombre: string;
-    tipo: 'archivo' | 'combinado';
+    tipo: 'archivo' | 'unidad' | 'combinado';
     totalDocumentos: number;
     resumen: ResumenMonetario;
     resumenPorProveedor: ResumenProveedor[];

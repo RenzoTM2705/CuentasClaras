@@ -19,6 +19,10 @@
         "noUnusedLocals": true,
         "noUnusedParameters": true,
         "noFallthroughCasesInSwitch": true,
+        "types": [
+            "node"
+        ],
+        "ignoreDeprecations": "6.0",
         "baseUrl": ".",
         "paths": {
             "@/*": [
@@ -27,7 +31,8 @@
         }
     },
     "include": [
-        "src"
+        "src",
+        "src/vite-env.d.ts"
     ],
     "references": [
         {
