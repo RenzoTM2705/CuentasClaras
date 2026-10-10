@@ -1,5 +1,25 @@
 # Changelog
 
+## [Fase 8] — Pruebas y despliegue
+
+### Añadido
+- Pruebas unitarias en backend (JUnit 5 + AssertJ):
+  - Reglas de moneda: PEN/USD, equivalencia pendiente.
+  - Clave de deduplicación: completa, incompleta, normalización.
+  - Catálogo de alias: tildes, mayúsculas, espacios.
+  - Deduplicación: exactos, parciales, únicos.
+- Configuración de despliegue:
+  - `frontend/vercel.json` para Vercel.
+  - `backend/render.yaml` para Render.
+  - `application-prod.yml` con `PORT` dinámico.
+- Documentación:
+  - `docs/despliegue.md` con guía paso a paso.
+  - `README.md` actualizado con advertencia de seguridad.
+
+### Notas
+- Sin base de datos, sin autenticación.
+- El backend en Render Free tarda ~30 s en despertar tras inactividad.
+
 ## [Fase 5] — Selector visual de vistas
 
 ### Añadido
