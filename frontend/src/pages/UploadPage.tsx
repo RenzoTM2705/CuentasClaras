@@ -128,24 +128,6 @@ export default function UploadPage({ onResultado }: Props) {
                     {error && <p className="text-xs text-red-600">{error}</p>}
                 </div>
 
-                <footer className="pt-4 text-center text-xs">
-                    <span
-                        className={
-                            backendStatus === 'online'
-                                ? 'text-emerald-600'
-                                : backendStatus === 'offline'
-                                    ? 'text-red-500'
-                                    : 'text-slate-400'
-                        }
-                    >
-                        ● Backend:{' '}
-                        {backendStatus === 'online'
-                            ? 'conectado'
-                            : backendStatus === 'offline'
-                                ? 'no disponible'
-                                : 'verificando…'}
-                    </span>
-                </footer>
             </div>
         </div>
     );
