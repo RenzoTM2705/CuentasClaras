@@ -8,6 +8,7 @@ import java.util.List;
 
 public class AnalisisResponse {
 
+    private String sessionId;
     private int totalFilasLeidas;
     private int totalRegistrosValidos;
     private int totalRegistrosRechazados;
@@ -16,6 +17,14 @@ public class AnalisisResponse {
     private ResumenCombinacion resumenCombinacion;
 
     public AnalisisResponse() {
+    }
+
+    public String getSessionId() {
+        return sessionId;
+    }
+
+    public void setSessionId(String sessionId) {
+        this.sessionId = sessionId;
     }
 
     public int getTotalFilasLeidas() {
@@ -62,7 +71,7 @@ public class AnalisisResponse {
         return resumenCombinacion;
     }
 
-    public void setResumenCombinacion(ResumenCombinacion r) {
-        this.resumenCombinacion = r;
+    public void setResumenCombinacion(ResumenCombinacion resumenCombinacion) {
+        this.resumenCombinacion = resumenCombinacion;
     }
 }
