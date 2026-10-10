@@ -4,8 +4,10 @@ services:
     runtime: docker
     plan: free
     region: oregon
-    dockerfilePath: ./Dockerfile
-    dockerContext: .
+    # Cambia la ruta al Dockerfile de la raíz
+    dockerfilePath: ../Dockerfile
+    # El contexto debe ser la raíz del proyecto
+    dockerContext: ..
     envVars:
       - key: SPRING_PROFILES_ACTIVE
         value: prod
