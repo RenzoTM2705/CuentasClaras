@@ -26,7 +26,7 @@ import java.util.Map;
  * <ol>
  * <li><b>Detalle</b>: encabezados originales + todas las filas.</li>
  * <li><b>Resumen</b>: totales generales, totales por unidad operativa y
- * desglose por proveedor.</li>
+ * desglose por unidad + proveedor.</li>
  * </ol>
  *
  * <p>
@@ -36,18 +36,15 @@ import java.util.Map;
 @Service
 public class ExportadorExcelService {
 
-    /** Palabras que identifican columnas monetarias. */
     private static final String[] CLAVES_MONEDA = {
             "saldo", "importe", "monto", "total", "subtotal", "igv", "detraccion",
             "tipo de cambio", "tipo cambio", "tc"
     };
 
-    /** Palabras que identifican columnas de fecha. */
     private static final String[] CLAVES_FECHA = {
             "fecha", "vencimiento", "emision", "contable", "recepcion", "corte"
     };
 
-    /** Palabras que identifican columnas de identificadores (texto). */
     private static final String[] CLAVES_TEXTO = {
             "ruc", "voucher", "numero", "nro", "cuenta", "oc", "telefono",
             "codigo", "factura", "comprobante", "documento"
@@ -253,21 +250,20 @@ public class ExportadorExcelService {
 
         int r = 0;
 
-        // --- Título principal
+        // Título principal
         Row t = hoja.createRow(r++);
         Cell ct = t.createCell(0);
         ct.setCellValue("Resumen financiero");
         ct.setCellStyle(estiloTitulo);
 
-        // --- Totales generales
+        // Totales generales
         ResumenMonetario resumen = calcularResumen(vista, filasFiltradas);
-
         r = filaTotales(hoja, r, "Total PEN", resumen.getTotalPEN().doubleValue(), estiloEncabezado, estiloMoneda);
         r = filaTotales(hoja, r, "Total USD", resumen.getTotalUSD().doubleValue(), estiloEncabezado, estiloMoneda);
 
         r += 2;
 
-        // --- Bloque: totales por unidad operativa
+        // Bloque: totales por unidad operativa
         Row tituloUnidades = hoja.createRow(r++);
         Cell ctu = tituloUnidades.createCell(0);
         ctu.setCellValue("Total de deuda por unidad operativa");
@@ -297,36 +293,36 @@ public class ExportadorExcelService {
 
         r += 2;
 
-        // --- Bloque: totales por proveedor (sin columna Docs)
+        // Bloque: unidad + proveedor
         Row tituloProv = hoja.createRow(r++);
         Cell ctp = tituloProv.createCell(0);
-        ctp.setCellValue("Total de deuda por proveedor");
+        ctp.setCellValue("Total de deuda por unidad operativa y proveedor");
         ctp.setCellStyle(estiloSubtitulo);
 
         Row encProv = hoja.createRow(r++);
-        String[] colsProv = { "RUC", "Proveedor", "Total PEN", "Total USD" };
+        String[] colsProv = { "Unidad operativa", "RUC", "Proveedor", "Total PEN", "Total USD" };
         for (int i = 0; i < colsProv.length; i++) {
             Cell c = encProv.createCell(i);
             c.setCellValue(colsProv[i]);
             c.setCellStyle(estiloEncabezado);
         }
 
-        List<ResumenProveedor> proveedores = calcularResumenPorProveedor(vista, filasFiltradas);
-        for (ResumenProveedor rp : proveedores) {
+        List<ResumenProveedorUnidad> proveedores = calcularResumenPorProveedor(vista, filasFiltradas);
+        for (ResumenProveedorUnidad rpu : proveedores) {
             Row row = hoja.createRow(r++);
-            row.createCell(0).setCellValue(rp.getRuc() == null ? "" : rp.getRuc());
-            row.createCell(1).setCellValue(rp.getProveedor() == null ? "" : rp.getProveedor());
+            row.createCell(0).setCellValue(rpu.unidad == null ? "(sin unidad)" : rpu.unidad);
+            row.createCell(1).setCellValue(rpu.ruc == null ? "" : rpu.ruc);
+            row.createCell(2).setCellValue(rpu.proveedor == null ? "" : rpu.proveedor);
 
-            Cell cPen = row.createCell(2);
-            cPen.setCellValue(rp.getTotalPEN().doubleValue());
+            Cell cPen = row.createCell(3);
+            cPen.setCellValue(rpu.totalPEN.doubleValue());
             cPen.setCellStyle(estiloMoneda);
 
-            Cell cUsd = row.createCell(3);
-            cUsd.setCellValue(rp.getTotalUSD().doubleValue());
+            Cell cUsd = row.createCell(4);
+            cUsd.setCellValue(rpu.totalUSD.doubleValue());
             cUsd.setCellStyle(estiloMoneda);
         }
 
-        // Anchos de columna
         for (int i = 0; i < 5; i++) {
             hoja.setColumnWidth(i, 5000);
         }
@@ -383,10 +379,6 @@ public class ExportadorExcelService {
         return r;
     }
 
-    /**
-     * Calcula el total por unidad operativa. La unidad se detecta por la
-     * columna cuyo encabezado normalizado sea "unidad operativa", "unidad" o "uo".
-     */
     private List<ResumenUnidad> calcularResumenPorUnidad(VistaCompleta vista, List<List<Object>> filas) {
         int idxUnidad = indiceColumna(vista, new String[] { "unidad operativa", "unidad", "uo" });
         int idxMoneda = indiceColumna(vista, new String[] { "divisa", "moneda", "currency" });
@@ -402,7 +394,7 @@ public class ExportadorExcelService {
                     ? fila.get(idxUnidad).toString().trim()
                     : "(sin unidad)";
 
-            ResumenUnidad ru = mapa.computeIfAbsent(unidad, u -> new ResumenUnidad(u));
+            ResumenUnidad ru = mapa.computeIfAbsent(unidad, ResumenUnidad::new);
 
             String moneda = idxMoneda >= 0 && fila.get(idxMoneda) != null
                     ? fila.get(idxMoneda).toString().toUpperCase(Locale.ROOT)
@@ -427,7 +419,13 @@ public class ExportadorExcelService {
         return lista;
     }
 
-    private List<ResumenProveedor> calcularResumenPorProveedor(VistaCompleta vista, List<List<Object>> filas) {
+    /**
+     * Agrupa por (unidad operativa + RUC o nombre). El mismo proveedor puede
+     * aparecer varias veces si tiene deuda en distintas unidades.
+     */
+    private List<ResumenProveedorUnidad> calcularResumenPorProveedor(VistaCompleta vista,
+            List<List<Object>> filas) {
+        int idxUnidad = indiceColumna(vista, new String[] { "unidad operativa", "unidad", "uo" });
         int idxRuc = indiceColumna(vista, new String[] { "ruc" });
         int idxProveedor = indiceColumna(vista, new String[] { "proveedor" });
         int idxMoneda = indiceColumna(vista, new String[] { "divisa", "moneda", "currency" });
@@ -436,18 +434,24 @@ public class ExportadorExcelService {
         int idxSaldoUSD = indiceColumna(vista, new String[] { "saldo usd", "saldo en dolares", "saldo dolares" });
         int idxSaldoPEN = indiceColumna(vista, new String[] { "saldo pen", "saldo soles", "saldo en soles" });
 
-        Map<String, ResumenProveedor> mapa = new LinkedHashMap<>();
+        Map<String, ResumenProveedorUnidad> mapa = new LinkedHashMap<>();
 
         for (List<Object> fila : filas) {
+            String unidad = idxUnidad >= 0 && fila.get(idxUnidad) != null
+                    ? fila.get(idxUnidad).toString().trim()
+                    : "(sin unidad)";
             String ruc = idxRuc >= 0 && fila.get(idxRuc) != null ? fila.get(idxRuc).toString().trim() : "";
             String prov = idxProveedor >= 0 && fila.get(idxProveedor) != null ? fila.get(idxProveedor).toString().trim()
                     : "";
 
-            String clave = !ruc.isEmpty() ? "RUC:" + ruc
+            String proveedorClave = !ruc.isEmpty()
+                    ? "RUC:" + ruc
                     : (!prov.isEmpty() ? "NOMBRE:" + prov.toUpperCase(Locale.ROOT) : "SIN");
 
-            ResumenProveedor rp = mapa.computeIfAbsent(clave,
-                    k -> new ResumenProveedor(ruc, prov.isEmpty() ? "(sin proveedor)" : prov));
+            String clave = unidad + "||" + proveedorClave;
+
+            ResumenProveedorUnidad rpu = mapa.computeIfAbsent(clave,
+                    k -> new ResumenProveedorUnidad(unidad, ruc, prov.isEmpty() ? "(sin proveedor)" : prov));
 
             String moneda = idxMoneda >= 0 && fila.get(idxMoneda) != null
                     ? fila.get(idxMoneda).toString().toUpperCase(Locale.ROOT)
@@ -459,20 +463,23 @@ public class ExportadorExcelService {
             if ("PEN".equals(moneda)) {
                 BigDecimal v = saldoPEN != null ? saldoPEN : saldoIngresado;
                 if (v != null)
-                    rp.setTotalPEN(rp.getTotalPEN().add(v));
+                    rpu.totalPEN = rpu.totalPEN.add(v);
             } else if ("USD".equals(moneda)) {
                 BigDecimal v = saldoUSD != null ? saldoUSD : saldoIngresado;
                 if (v != null)
-                    rp.setTotalUSD(rp.getTotalUSD().add(v));
+                    rpu.totalUSD = rpu.totalUSD.add(v);
             }
         }
 
-        List<ResumenProveedor> lista = new ArrayList<>(mapa.values());
+        List<ResumenProveedorUnidad> lista = new ArrayList<>(mapa.values());
         lista.sort((a, b) -> {
-            int cmp = b.getTotalPEN().compareTo(a.getTotalPEN());
-            if (cmp != 0)
-                return cmp;
-            return b.getTotalUSD().compareTo(a.getTotalUSD());
+            int cu = a.unidad.compareTo(b.unidad);
+            if (cu != 0)
+                return cu;
+            int cp = b.totalPEN.compareTo(a.totalPEN);
+            if (cp != 0)
+                return cp;
+            return b.totalUSD.compareTo(a.totalUSD);
         });
         return lista;
     }
@@ -618,9 +625,6 @@ public class ExportadorExcelService {
 
     // ------------------------------------------------------------------ Auxiliares
 
-    /**
-     * Estructura interna para acumular totales por unidad operativa.
-     */
     private static class ResumenUnidad {
         final String unidad;
         BigDecimal totalPEN = BigDecimal.ZERO;
@@ -628,6 +632,20 @@ public class ExportadorExcelService {
 
         ResumenUnidad(String unidad) {
             this.unidad = unidad;
+        }
+    }
+
+    private static class ResumenProveedorUnidad {
+        final String unidad;
+        final String ruc;
+        final String proveedor;
+        BigDecimal totalPEN = BigDecimal.ZERO;
+        BigDecimal totalUSD = BigDecimal.ZERO;
+
+        ResumenProveedorUnidad(String unidad, String ruc, String proveedor) {
+            this.unidad = unidad;
+            this.ruc = ruc;
+            this.proveedor = proveedor;
         }
     }
 }
