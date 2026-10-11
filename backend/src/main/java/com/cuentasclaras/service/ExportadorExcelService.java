@@ -11,8 +11,11 @@ import org.springframework.stereotype.Service;
 import java.io.ByteArrayOutputStream;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 /**
  * Genera un archivo .xlsx con la vista completa o filtrada.
@@ -22,7 +25,8 @@ import java.util.Locale;
  * </p>
  * <ol>
  * <li><b>Detalle</b>: encabezados originales + todas las filas.</li>
- * <li><b>Resumen</b>: totales generales y desglose por proveedor.</li>
+ * <li><b>Resumen</b>: totales generales, totales por unidad operativa y
+ * desglose por proveedor.</li>
  * </ol>
  *
  * <p>
@@ -58,11 +62,12 @@ public class ExportadorExcelService {
             CellStyle estiloFecha = crearEstiloFecha(wb);
             CellStyle estiloTitulo = crearEstiloTitulo(wb);
             CellStyle estiloTexto = crearEstiloTexto(wb);
+            CellStyle estiloSubtitulo = crearEstiloSubtitulo(wb);
 
             List<List<Object>> filasFiltradas = filtrarFilas(vista, filtros);
 
             crearHojaDetalle(wb, vista, filasFiltradas, estiloEncabezado, estiloMoneda, estiloFecha, estiloTexto);
-            crearHojaResumen(wb, vista, filasFiltradas, estiloTitulo, estiloEncabezado, estiloMoneda);
+            crearHojaResumen(wb, vista, filasFiltradas, estiloTitulo, estiloSubtitulo, estiloEncabezado, estiloMoneda);
 
             wb.write(out);
             return out.toByteArray();
@@ -90,7 +95,6 @@ public class ExportadorExcelService {
             c.setCellStyle(estiloEncabezado);
         }
 
-        // Clasificar cada columna una sola vez
         int numCols = vista.getColumnas().size();
         TipoColumna[] tipos = new TipoColumna[numCols];
         for (int i = 0; i < numCols; i++) {
@@ -116,7 +120,6 @@ public class ExportadorExcelService {
         if (valor == null)
             return;
 
-        // Según el tipo de columna, forzamos el tratamiento
         switch (tipo) {
             case FECHA: {
                 LocalDate fecha = comoFecha(valor);
@@ -142,7 +145,6 @@ public class ExportadorExcelService {
             }
             case TEXTO:
             default: {
-                // Identificadores y texto: siempre string, sin comas ni decimales
                 cell.setCellValue(valor.toString());
                 cell.setCellStyle(estiloTexto);
                 return;
@@ -150,7 +152,6 @@ public class ExportadorExcelService {
         }
     }
 
-    /** Convierte un valor numérico o string numérico a fecha, o null. */
     private LocalDate comoFecha(Object v) {
         if (v == null)
             return null;
@@ -175,7 +176,6 @@ public class ExportadorExcelService {
         return null;
     }
 
-    /** Convierte un valor a BigDecimal si es numérico, o null. */
     private BigDecimal comoNumero(Object v) {
         if (v == null)
             return null;
@@ -194,35 +194,21 @@ public class ExportadorExcelService {
     }
 
     // ------------------------------------------------------------------
-    // Clasificación de columnas
+    // Clasificación
 
     private enum TipoColumna {
         MONEDA, FECHA, TEXTO
     }
 
-    /**
-     * Clasifica una columna según su nombre.
-     * El orden importa: texto > fecha > moneda, porque "NÚMERO DE CUENTA"
-     * contiene "cuenta" (texto) y no debe caer en moneda.
-     */
     private TipoColumna clasificarColumna(String encabezado) {
         if (encabezado == null)
             return TipoColumna.TEXTO;
         String n = normalizar(encabezado);
 
-        // 1) Identificadores → texto
         for (String clave : CLAVES_TEXTO) {
             if (n.contains(clave)) {
-                // Excepción: "saldo en moneda ingresada" contiene "moneda" pero es moneda.
-                // Y "saldo cuenta" sería moneda. Pero "numero de cuenta" es texto.
-                // Como "ruc", "voucher", "numero", "cuenta", "oc" son identificadores,
-                // y las columnas de moneda reales contienen "saldo"/"importe"/"monto",
-                // dejamos que las claves de texto ganen.
                 for (String mon : CLAVES_MONEDA) {
                     if (n.contains(mon)) {
-                        // La columna contiene tanto un identificador como una clave monetaria.
-                        // Ej. "SALDO EN CUENTA" → moneda. "NUMERO DE CUENTA" → texto.
-                        // Decidimos por la primera palabra del encabezado normalizado.
                         String primera = n.split(" ")[0];
                         if (esClaveTexto(primera))
                             return TipoColumna.TEXTO;
@@ -233,19 +219,16 @@ public class ExportadorExcelService {
             }
         }
 
-        // 2) Fechas
         for (String clave : CLAVES_FECHA) {
             if (n.contains(clave))
                 return TipoColumna.FECHA;
         }
 
-        // 3) Moneda
         for (String clave : CLAVES_MONEDA) {
             if (n.contains(clave))
                 return TipoColumna.MONEDA;
         }
 
-        // 4) Por defecto, texto
         return TipoColumna.TEXTO;
     }
 
@@ -263,57 +246,94 @@ public class ExportadorExcelService {
             VistaCompleta vista,
             List<List<Object>> filasFiltradas,
             CellStyle estiloTitulo,
+            CellStyle estiloSubtitulo,
             CellStyle estiloEncabezado,
             CellStyle estiloMoneda) {
         Sheet hoja = wb.createSheet("Resumen");
 
-        Row t = hoja.createRow(0);
+        int r = 0;
+
+        // --- Título principal
+        Row t = hoja.createRow(r++);
         Cell ct = t.createCell(0);
         ct.setCellValue("Resumen financiero");
         ct.setCellStyle(estiloTitulo);
 
+        // --- Totales generales
         ResumenMonetario resumen = calcularResumen(vista, filasFiltradas);
 
-        int r = 2;
-        r = filaTotales(hoja, r, "Total PEN", resumen.getTotalPEN().doubleValue(), "PEN", estiloEncabezado,
-                estiloMoneda);
-        r = filaTotales(hoja, r, "Total USD", resumen.getTotalUSD().doubleValue(), "USD", estiloEncabezado,
-                estiloMoneda);
+        r = filaTotales(hoja, r, "Total PEN", resumen.getTotalPEN().doubleValue(), estiloEncabezado, estiloMoneda);
+        r = filaTotales(hoja, r, "Total USD", resumen.getTotalUSD().doubleValue(), estiloEncabezado, estiloMoneda);
 
         r += 2;
 
-        Row enc = hoja.createRow(r++);
-        String[] cols = { "RUC", "Proveedor", "Docs", "Total PEN", "Total USD" };
-        for (int i = 0; i < cols.length; i++) {
-            Cell c = enc.createCell(i);
-            c.setCellValue(cols[i]);
+        // --- Bloque: totales por unidad operativa
+        Row tituloUnidades = hoja.createRow(r++);
+        Cell ctu = tituloUnidades.createCell(0);
+        ctu.setCellValue("Total de deuda por unidad operativa");
+        ctu.setCellStyle(estiloSubtitulo);
+
+        Row encUnidades = hoja.createRow(r++);
+        String[] colsUnidades = { "Unidad operativa", "Total PEN", "Total USD" };
+        for (int i = 0; i < colsUnidades.length; i++) {
+            Cell c = encUnidades.createCell(i);
+            c.setCellValue(colsUnidades[i]);
+            c.setCellStyle(estiloEncabezado);
+        }
+
+        List<ResumenUnidad> unidades = calcularResumenPorUnidad(vista, filasFiltradas);
+        for (ResumenUnidad ru : unidades) {
+            Row row = hoja.createRow(r++);
+            row.createCell(0).setCellValue(ru.unidad == null ? "(sin unidad)" : ru.unidad);
+
+            Cell cPen = row.createCell(1);
+            cPen.setCellValue(ru.totalPEN.doubleValue());
+            cPen.setCellStyle(estiloMoneda);
+
+            Cell cUsd = row.createCell(2);
+            cUsd.setCellValue(ru.totalUSD.doubleValue());
+            cUsd.setCellStyle(estiloMoneda);
+        }
+
+        r += 2;
+
+        // --- Bloque: totales por proveedor (sin columna Docs)
+        Row tituloProv = hoja.createRow(r++);
+        Cell ctp = tituloProv.createCell(0);
+        ctp.setCellValue("Total de deuda por proveedor");
+        ctp.setCellStyle(estiloSubtitulo);
+
+        Row encProv = hoja.createRow(r++);
+        String[] colsProv = { "RUC", "Proveedor", "Total PEN", "Total USD" };
+        for (int i = 0; i < colsProv.length; i++) {
+            Cell c = encProv.createCell(i);
+            c.setCellValue(colsProv[i]);
             c.setCellStyle(estiloEncabezado);
         }
 
         List<ResumenProveedor> proveedores = calcularResumenPorProveedor(vista, filasFiltradas);
         for (ResumenProveedor rp : proveedores) {
             Row row = hoja.createRow(r++);
-            // RUC como texto siempre
             row.createCell(0).setCellValue(rp.getRuc() == null ? "" : rp.getRuc());
             row.createCell(1).setCellValue(rp.getProveedor() == null ? "" : rp.getProveedor());
-            row.createCell(2).setCellValue(rp.getTotalDocumentos());
 
-            Cell cPen = row.createCell(3);
+            Cell cPen = row.createCell(2);
             cPen.setCellValue(rp.getTotalPEN().doubleValue());
             cPen.setCellStyle(estiloMoneda);
 
-            Cell cUsd = row.createCell(4);
+            Cell cUsd = row.createCell(3);
             cUsd.setCellValue(rp.getTotalUSD().doubleValue());
             cUsd.setCellStyle(estiloMoneda);
         }
 
-        for (int i = 0; i < cols.length; i++) {
+        // Anchos de columna
+        for (int i = 0; i < 5; i++) {
             hoja.setColumnWidth(i, 5000);
         }
     }
 
     private int filaTotales(Sheet hoja, int r, String etiqueta, double valor,
-            String moneda, CellStyle estiloEncabezado, CellStyle estiloMoneda) {
+            CellStyle estiloEncabezado, CellStyle estiloMoneda) {
         Row row = hoja.createRow(r);
         Cell c1 = row.createCell(0);
         c1.setCellValue(etiqueta);
@@ -322,9 +342,6 @@ public class ExportadorExcelService {
         Cell c2 = row.createCell(1);
         c2.setCellValue(valor);
         c2.setCellStyle(estiloMoneda);
-
-        Cell c3 = row.createCell(2);
-        c3.setCellValue(moneda);
 
         return r + 1;
     }
@@ -342,8 +359,8 @@ public class ExportadorExcelService {
         BigDecimal totalUSD = BigDecimal.ZERO;
 
         for (List<Object> fila : filas) {
-            String moneda = idxMoneda >= 0
-                    ? String.valueOf(fila.get(idxMoneda) == null ? "" : fila.get(idxMoneda)).toUpperCase()
+            String moneda = idxMoneda >= 0 && fila.get(idxMoneda) != null
+                    ? fila.get(idxMoneda).toString().toUpperCase(Locale.ROOT)
                     : "";
             BigDecimal saldoIngresado = idxSaldoIngresado >= 0 ? aBigDecimal(fila.get(idxSaldoIngresado)) : null;
             BigDecimal saldoUSD = idxSaldoUSD >= 0 ? aBigDecimal(fila.get(idxSaldoUSD)) : null;
@@ -366,6 +383,50 @@ public class ExportadorExcelService {
         return r;
     }
 
+    /**
+     * Calcula el total por unidad operativa. La unidad se detecta por la
+     * columna cuyo encabezado normalizado sea "unidad operativa", "unidad" o "uo".
+     */
+    private List<ResumenUnidad> calcularResumenPorUnidad(VistaCompleta vista, List<List<Object>> filas) {
+        int idxUnidad = indiceColumna(vista, new String[] { "unidad operativa", "unidad", "uo" });
+        int idxMoneda = indiceColumna(vista, new String[] { "divisa", "moneda", "currency" });
+        int idxSaldoIngresado = indiceColumna(vista,
+                new String[] { "saldo en moneda ingresada", "saldo moneda ingresada" });
+        int idxSaldoUSD = indiceColumna(vista, new String[] { "saldo usd", "saldo en dolares", "saldo dolares" });
+        int idxSaldoPEN = indiceColumna(vista, new String[] { "saldo pen", "saldo soles", "saldo en soles" });
+
+        Map<String, ResumenUnidad> mapa = new LinkedHashMap<>();
+
+        for (List<Object> fila : filas) {
+            String unidad = idxUnidad >= 0 && fila.get(idxUnidad) != null
+                    ? fila.get(idxUnidad).toString().trim()
+                    : "(sin unidad)";
+
+            ResumenUnidad ru = mapa.computeIfAbsent(unidad, u -> new ResumenUnidad(u));
+
+            String moneda = idxMoneda >= 0 && fila.get(idxMoneda) != null
+                    ? fila.get(idxMoneda).toString().toUpperCase(Locale.ROOT)
+                    : "";
+            BigDecimal saldoIngresado = idxSaldoIngresado >= 0 ? aBigDecimal(fila.get(idxSaldoIngresado)) : null;
+            BigDecimal saldoUSD = idxSaldoUSD >= 0 ? aBigDecimal(fila.get(idxSaldoUSD)) : null;
+            BigDecimal saldoPEN = idxSaldoPEN >= 0 ? aBigDecimal(fila.get(idxSaldoPEN)) : null;
+
+            if ("PEN".equals(moneda)) {
+                BigDecimal v = saldoPEN != null ? saldoPEN : saldoIngresado;
+                if (v != null)
+                    ru.totalPEN = ru.totalPEN.add(v);
+            } else if ("USD".equals(moneda)) {
+                BigDecimal v = saldoUSD != null ? saldoUSD : saldoIngresado;
+                if (v != null)
+                    ru.totalUSD = ru.totalUSD.add(v);
+            }
+        }
+
+        List<ResumenUnidad> lista = new ArrayList<>(mapa.values());
+        lista.sort((a, b) -> b.totalPEN.compareTo(a.totalPEN));
+        return lista;
+    }
+
     private List<ResumenProveedor> calcularResumenPorProveedor(VistaCompleta vista, List<List<Object>> filas) {
         int idxRuc = indiceColumna(vista, new String[] { "ruc" });
         int idxProveedor = indiceColumna(vista, new String[] { "proveedor" });
@@ -375,22 +436,21 @@ public class ExportadorExcelService {
         int idxSaldoUSD = indiceColumna(vista, new String[] { "saldo usd", "saldo en dolares", "saldo dolares" });
         int idxSaldoPEN = indiceColumna(vista, new String[] { "saldo pen", "saldo soles", "saldo en soles" });
 
-        java.util.Map<String, ResumenProveedor> mapa = new java.util.LinkedHashMap<>();
+        Map<String, ResumenProveedor> mapa = new LinkedHashMap<>();
 
         for (List<Object> fila : filas) {
             String ruc = idxRuc >= 0 && fila.get(idxRuc) != null ? fila.get(idxRuc).toString().trim() : "";
             String prov = idxProveedor >= 0 && fila.get(idxProveedor) != null ? fila.get(idxProveedor).toString().trim()
                     : "";
 
-            String clave = !ruc.isEmpty() ? "RUC:" + ruc : (!prov.isEmpty() ? "NOMBRE:" + prov.toUpperCase() : "SIN");
+            String clave = !ruc.isEmpty() ? "RUC:" + ruc
+                    : (!prov.isEmpty() ? "NOMBRE:" + prov.toUpperCase(Locale.ROOT) : "SIN");
 
             ResumenProveedor rp = mapa.computeIfAbsent(clave,
                     k -> new ResumenProveedor(ruc, prov.isEmpty() ? "(sin proveedor)" : prov));
 
-            rp.setTotalDocumentos(rp.getTotalDocumentos() + 1);
-
-            String moneda = idxMoneda >= 0
-                    ? String.valueOf(fila.get(idxMoneda) == null ? "" : fila.get(idxMoneda)).toUpperCase()
+            String moneda = idxMoneda >= 0 && fila.get(idxMoneda) != null
+                    ? fila.get(idxMoneda).toString().toUpperCase(Locale.ROOT)
                     : "";
             BigDecimal saldoIngresado = idxSaldoIngresado >= 0 ? aBigDecimal(fila.get(idxSaldoIngresado)) : null;
             BigDecimal saldoUSD = idxSaldoUSD >= 0 ? aBigDecimal(fila.get(idxSaldoUSD)) : null;
@@ -407,7 +467,7 @@ public class ExportadorExcelService {
             }
         }
 
-        List<ResumenProveedor> lista = new java.util.ArrayList<>(mapa.values());
+        List<ResumenProveedor> lista = new ArrayList<>(mapa.values());
         lista.sort((a, b) -> {
             int cmp = b.getTotalPEN().compareTo(a.getTotalPEN());
             if (cmp != 0)
@@ -469,7 +529,7 @@ public class ExportadorExcelService {
         int idxUnidad = indiceColumna(vista, new String[] { "unidad operativa", "unidad", "uo" });
         int idxMoneda = indiceColumna(vista, new String[] { "divisa", "moneda", "currency" });
 
-        List<List<Object>> resultado = new java.util.ArrayList<>();
+        List<List<Object>> resultado = new ArrayList<>();
 
         for (List<Object> fila : vista.getFilas()) {
             if (filtros.getProveedor() != null && !filtros.getProveedor().isBlank()) {
@@ -540,10 +600,34 @@ public class ExportadorExcelService {
         return s;
     }
 
+    private CellStyle crearEstiloSubtitulo(Workbook wb) {
+        CellStyle s = wb.createCellStyle();
+        Font f = wb.createFont();
+        f.setBold(true);
+        f.setFontHeightInPoints((short) 12);
+        s.setFont(f);
+        return s;
+    }
+
     private CellStyle crearEstiloTexto(Workbook wb) {
         CellStyle s = wb.createCellStyle();
         DataFormat df = wb.createDataFormat();
         s.setDataFormat(df.getFormat("@"));
         return s;
+    }
+
+    // ------------------------------------------------------------------ Auxiliares
+
+    /**
+     * Estructura interna para acumular totales por unidad operativa.
+     */
+    private static class ResumenUnidad {
+        final String unidad;
+        BigDecimal totalPEN = BigDecimal.ZERO;
+        BigDecimal totalUSD = BigDecimal.ZERO;
+
+        ResumenUnidad(String unidad) {
+            this.unidad = unidad;
+        }
     }
 }
