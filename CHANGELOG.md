@@ -1,5 +1,7 @@
 # Changelog
 
+Todos los cambios notables de este proyecto se documentan en este archivo.
+
 ## [Fase 8] — Pruebas y despliegue
 
 ### Añadido
@@ -10,15 +12,96 @@
   - Deduplicación: exactos, parciales, únicos.
 - Configuración de despliegue:
   - `frontend/vercel.json` para Vercel.
-  - `backend/render.yaml` para Render.
+  - `backend/render.yaml` y `backend/Dockerfile` para Render.
   - `application-prod.yml` con `PORT` dinámico.
 - Documentación:
   - `docs/despliegue.md` con guía paso a paso.
   - `README.md` actualizado con advertencia de seguridad.
 
-### Notas
-- Sin base de datos, sin autenticación.
-- El backend en Render Free tarda ~30 s en despertar tras inactividad.
+### Desplegado
+- Frontend en Vercel: `https://cuentas-claras-teal.vercel.app`
+- Backend en Render: `https://cuentasclaras-backend.onrender.com`
+
+### Notas operativas
+- Backend en Render (Plan Free): CPU compartida, 512 MB de RAM y suspensión (sleep) tras 15 minutos de inactividad.
+- Se configuró UptimeRobot para hacer ping al endpoint `/api/health` cada 5 minutos y mantener el backend despierto.
+- Sin base de datos: los análisis son efímeros en memoria.
+- Sin autenticación: se recomienda añadir una capa de seguridad si el despliegue queda público.
+
+---
+
+## [Fase 7.3.1] — Corrección de estilos en hoja Tratado
+
+### Cambiado
+- Se eliminaron los colores de fondo (azul, rojo, amarillo) de la hoja `Tratado` del Excel exportado.
+- Todas las celdas de datos ahora tienen fondo blanco, manteniendo el formato original solicitado.
+- Se conserva la fila `Total general` al final con la suma de todas las columnas.
+
+---
+
+## [Fase 7.3] — Hoja Tratado y filas null
+
+### Añadido
+- Nueva hoja `Tratado` en el Excel exportado con una tabla dinámica de proveedores por unidad operativa.
+- Estructura de tabla dinámica:
+  - Fila superior combinando los nombres de las unidades operativas.
+  - Subencabezados de `Suma de Total USD` y `Suma de Total PEN` por unidad.
+  - Columnas finales de totales generales.
+  - Fila final `Total general` con la suma de cada columna.
+- Orden alfabético para unidades operativas y proveedores.
+
+### Cambiado
+- Las filas con todos los valores nulos (`null`, `NULL`, `#N/A`, `N/A`, `-`) se descartan silenciosamente en la importación y la exportación.
+- Aplica a las tres hojas: `Detalle`, `Resumen` y `Tratado`.
+
+---
+
+## [Fase 7.2] — Proveedores agrupados por unidad operativa
+
+### Cambiado
+- El bloque "Total de deuda por proveedor" en la hoja `Resumen` ahora es "Total de deuda por unidad operativa y proveedor".
+- Nueva columna "Unidad operativa" al inicio de la tabla de proveedores.
+- Un mismo proveedor puede aparecer en varias filas si tiene deuda en distintas unidades operativas.
+- Ordenado por unidad operativa, y luego por Total PEN descendente.
+
+---
+
+## [Fase 7.1] — Total por unidad operativa
+
+### Añadido
+- Bloque "Total de deuda por unidad operativa" en la hoja `Resumen`.
+- Columna "Docs" (documentos) eliminada de la tabla de proveedores.
+- Los totales respetan los filtros aplicados en la interfaz.
+
+---
+
+## [Fase 7] — Exportación a Excel
+
+### Añadido
+- `ExportadorExcelService`: genera archivos `.xlsx` con dos hojas (`Detalle` y `Resumen`).
+- Endpoint: `POST /api/sesiones/{sessionId}/vistas/{vistaId}/exportar`.
+- Respeto de los filtros aplicados en la UI.
+- PEN y USD siempre separados.
+- Clasificación automática del tipo de columna (MONEDA / FECHA / TEXTO) para aplicar formatos correctos en Excel.
+- Fechas como tipo fecha real y números con formato `#,##0.00`.
+- Identificadores como RUC, voucher, cuenta bancaria se exportan como texto plano.
+
+---
+
+## [Fase 6] — Análisis financiero
+
+### Añadido
+- Filtros en la vista ampliada: por proveedor/RUC, unidad operativa y moneda.
+- Ordenamiento por columna (ascendente / descendente / sin orden).
+- Totales al pie que respetan los filtros, con PEN y USD separados.
+- Resumen por proveedor en la vista ampliada.
+
+### Decisiones
+- Análisis exclusivamente monetario (no se calculan vencimientos ni fechas de corte).
+- Si se sube 1 archivo con N unidades operativas en modo "independiente", se genera una vista por unidad.
+- Si se sube 1 archivo en modo "ambos", se genera una vista por unidad + una combinada.
+
+---
 
 ## [Fase 5] — Selector visual de vistas
 
@@ -28,18 +111,9 @@
 - Región de vista con icono Excel, nombre y subtítulo de identificadores.
 - Vista ampliada a pantalla completa con cierre por botón o `Esc`.
 - Resumen general por vista, con PEN y USD siempre separados.
-- Resumen por proveedor dentro de la vista ampliada.
 - Tabla de detalle con encabezados originales y valores sin transformar.
 - Animación breve de reparto de cartas al primer render del mosaico.
 - Navegación lineal sin router: subir → ver → ampliar → volver → subir.
-
-### Cambiado
-- La lógica de generación de vistas se simplifica:
-  - 1 archivo → 1 vista con el nombre del archivo.
-  - N archivos · `combinar` → 1 vista `Combinado`.
-  - N archivos · `independiente` → N vistas por archivo.
-  - N archivos · `ambos` → N vistas por archivo + 1 vista `Combinado`.
-- Ya no se generan vistas por unidad operativa. Las unidades siguen apareciendo como columna en la tabla.
 
 ### Arquitectura
 - **Sesiones efímeras en memoria**:
@@ -80,7 +154,7 @@
 
 ### Cambiado
 - La columna `DIAS A VENCER` se trata como **texto descriptivo**, no como número.
-- El cálculo real de vencimientos se pospone a la Fase 6.
+- El cálculo real de vencimientos se pospone (finalmente descartado en la Fase 6).
 
 ---
 
