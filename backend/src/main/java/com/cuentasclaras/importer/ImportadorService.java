@@ -9,6 +9,7 @@ import com.cuentasclaras.service.DeduplicacionService;
 
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellType;
+import org.apache.poi.ss.usermodel.DataFormatter;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
@@ -207,25 +208,34 @@ public class ImportadorService {
      * Busca una celda en las primeras 10 filas que contenga "AL:" o "AL." y extrae
      * la fecha.
      */
-    private String extraerFechaReporte(Sheet hoja) {
-        for (int i = 0; i < Math.min(10, hoja.getLastRowNum()); i++) {
+        private String extraerFechaReporte(Sheet hoja) {
+        DataFormatter formatter = new DataFormatter();
+        
+        for (int i = 0; i < Math.min(15, hoja.getLastRowNum()); i++) {
             Row row = hoja.getRow(i);
-            if (row == null)
-                continue;
+            if (row == null) continue;
+            
             for (int c = 0; c < row.getLastCellNum(); c++) {
                 Cell cell = row.getCell(c);
-                if (cell != null && cell.getCellType() == CellType.STRING) {
-                    String val = cell.getStringCellValue().trim();
-                    if (val.toUpperCase().contains("AL:") || val.toUpperCase().contains("AL.")) {
-                        // Busca patrón de fecha (19.06.26, 05-10-2026, etc.)
-                        java.util.regex.Matcher m = java.util.regex.Pattern.compile("(\\d{2}[.-]\\d{2}[.-]\\d{2,4})")
-                                .matcher(val);
-                        if (m.find())
-                            return m.group(1);
+                if (cell != null) {
+                    String val = formatter.formatCellValue(cell).trim().toUpperCase();
+                    
+                    // Si la celda dice "AL." o "AL:"
+                    if (val.equals("AL.") || val.equals("AL:") || val.startsWith("AL. ") || val.startsWith("AL: ")) {
+                        // 1. Intentar extraer la fecha de la misma celda (ej. "AL. 05-10-2026")
+                        java.util.regex.Matcher m = java.util.regex.Pattern.compile("(\\d{1,2}[-./]\\d{1,2}[-./]\\d{2,4})").matcher(val);
+                        if (m.find()) return m.group(1);
+                        
+                        // 2. Si no está en la misma celda, leer la celda de al lado
+                        Cell nextCell = row.getCell(c + 1);
+                        if (nextCell != null) {
+                            String nextVal = formatter.formatCellValue(nextCell).trim();
+                            if (!nextVal.isEmpty()) return nextVal;
+                        }
                     }
                 }
             }
         }
-        return "Fecha Única";
+        return "Sin fecha";
     }
 }
