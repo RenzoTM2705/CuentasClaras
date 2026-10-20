@@ -104,7 +104,7 @@ public class AnalisisController {
         VistaCompleta completa = generadorVistas.construirCompleta(
                 vistaOpt.get(), sesion.getRegistros());
 
-        byte[] xlsx = exportador.exportar(completa, filtros);
+        byte[] xlsx = exportador.exportar(completa, filtros, sesion.getRegistros());
 
         String nombre = construirNombreArchivo(completa);
         String contentDisposition = "attachment; filename=\"" + nombre + "\"";
