@@ -60,6 +60,8 @@ public class RegistroNormalizado {
     // Valores originales de la fila, tal como venían en el Excel
     private Map<String, Object> valoresOriginales;
 
+    private String fechaReporte;
+
     // Constructor vacío + getters/setters
     public RegistroNormalizado() {
     }
@@ -334,5 +336,13 @@ public class RegistroNormalizado {
 
     public void setValoresOriginales(Map<String, Object> valoresOriginales) {
         this.valoresOriginales = valoresOriginales;
+    }
+
+    public String getFechaReporte() {
+        return fechaReporte;
+    }
+
+    public void setFechaReporte(String fechaReporte) {
+        this.fechaReporte = fechaReporte;
     }
 }

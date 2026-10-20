@@ -6,6 +6,10 @@ import com.cuentasclaras.domain.ResultadoAnalisis;
 import com.cuentasclaras.domain.ResumenCombinacion;
 import com.cuentasclaras.service.ClaveDocumentoService;
 import com.cuentasclaras.service.DeduplicacionService;
+
+import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.CellType;
+import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.ss.usermodel.WorkbookFactory;
@@ -121,6 +125,9 @@ public class ImportadorService {
                 List<Map<String, Object>> filas = lector.leerDesde(hoja, det.filaEncabezado());
                 resultado.setTotalFilasLeidas(resultado.getTotalFilasLeidas() + filas.size());
 
+                // Extraer la fecha del reporte (fila 5 usualmente)
+                String fechaReporte = extraerFechaReporte(hoja);
+
                 for (Map<String, Object> fila : filas) {
                     // Registrar columnas para detectar incompatibilidades
                     for (String k : fila.keySet()) {
@@ -133,6 +140,7 @@ public class ImportadorService {
                     resultado.getAdvertencias().addAll(res.advertencias());
 
                     RegistroNormalizado r = res.registro();
+                    r.setFechaReporte(fechaReporte); // <--- ASIGNACIÓN CORRECTA DENTRO DEL BUCLE
                     claves.generar(r);
                     acumulador.add(r);
                 }
@@ -193,5 +201,31 @@ public class ImportadorService {
                 }
             }
         }
+    }
+
+    /**
+     * Busca una celda en las primeras 10 filas que contenga "AL:" o "AL." y extrae
+     * la fecha.
+     */
+    private String extraerFechaReporte(Sheet hoja) {
+        for (int i = 0; i < Math.min(10, hoja.getLastRowNum()); i++) {
+            Row row = hoja.getRow(i);
+            if (row == null)
+                continue;
+            for (int c = 0; c < row.getLastCellNum(); c++) {
+                Cell cell = row.getCell(c);
+                if (cell != null && cell.getCellType() == CellType.STRING) {
+                    String val = cell.getStringCellValue().trim();
+                    if (val.toUpperCase().contains("AL:") || val.toUpperCase().contains("AL.")) {
+                        // Busca patrón de fecha (19.06.26, 05-10-2026, etc.)
+                        java.util.regex.Matcher m = java.util.regex.Pattern.compile("(\\d{2}[.-]\\d{2}[.-]\\d{2,4})")
+                                .matcher(val);
+                        if (m.find())
+                            return m.group(1);
+                    }
+                }
+            }
+        }
+        return "Fecha Única";
     }
 }
