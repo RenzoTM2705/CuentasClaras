@@ -16,9 +16,6 @@ import java.time.LocalDate;
 import java.util.*;
 import java.util.stream.Collectors;
 
-/**
- * Genera un archivo .xlsx con la vista completa o filtrada.
- */
 @Service
 public class ExportadorExcelService {
 
@@ -54,11 +51,22 @@ public class ExportadorExcelService {
             CellStyle estiloSubtitulo = crearEstiloSubtitulo(wb);
             CellStyle estiloTotalFila = crearEstiloTotalFila(wb);
 
-            // 1. Generar la lista de List<Object> para las hojas existentes
+            // Filtrar nulos y convertir a List<Object> para las hojas existentes
             List<List<Object>> filasFiltradas = new ArrayList<>();
+            List<RegistroNormalizado> registrosLimpios = new ArrayList<>();
+
             for (RegistroNormalizado r : todosLosRegistros) {
                 if (r.getValoresOriginales() == null)
                     continue;
+                // Ignorar si es "sin unidad" o "sin proveedor"
+                if ("(sin unidad)".equalsIgnoreCase(r.getUnidadOperativa()) ||
+                        "(sin proveedor)".equalsIgnoreCase(r.getProveedor()) ||
+                        r.getProveedor() == null) {
+                    continue;
+                }
+
+                registrosLimpios.add(r);
+
                 List<Object> fila = new ArrayList<>();
                 for (Map.Entry<String, Object> e : r.getValoresOriginales().entrySet()) {
                     if (!"__filaOrigen".equals(e.getKey()))
@@ -67,14 +75,18 @@ public class ExportadorExcelService {
                 filasFiltradas.add(fila);
             }
 
-            // 2. Crear hojas originales
             crearHojaDetalle(wb, vista, filasFiltradas, estiloEncabezado, estiloMoneda, estiloFecha, estiloTexto);
+
+            // 1. Crear la hoja Resumen base
             crearHojaResumen(wb, vista, filasFiltradas, estiloTitulo, estiloSubtitulo, estiloEncabezado, estiloMoneda);
+
+            // 2. AÑADIR LA COMPARATIVA AL FINAL DE LA HOJA RESUMEN
+            agregarComparativaFechas(wb, registrosLimpios, estiloSubtitulo, estiloEncabezado, estiloMoneda);
+
             crearHojaTratado(wb, vista, filasFiltradas, estiloEncabezado, estiloMoneda, estiloTexto, estiloTotalFila);
 
-            // 3. Añadir la nueva lógica
-            agregarComparativaFechas(wb, todosLosRegistros, estiloSubtitulo, estiloEncabezado, estiloMoneda);
-            cruceService.generarHojaCruce(wb, todosLosRegistros, estiloMoneda, estiloEncabezado);
+            // 3. Generar Cruce
+            cruceService.generarHojaCruce(wb, registrosLimpios, estiloMoneda, estiloEncabezado);
 
             wb.write(out);
             return out.toByteArray();
@@ -84,7 +96,7 @@ public class ExportadorExcelService {
         }
     }
 
-    // --- NUEVO MÉTODO PARA LA COMPARATIVA ---
+    // --- MÉTODO PARA LA COMPARATIVA POR FECHAS ---
     private void agregarComparativaFechas(Workbook wb, List<RegistroNormalizado> registros,
             CellStyle estiloSubtitulo, CellStyle estiloEncabezado, CellStyle estiloMoneda) {
         Sheet hoja = wb.getSheet("Resumen");
@@ -94,86 +106,168 @@ public class ExportadorExcelService {
         Set<String> fechas = registros.stream()
                 .map(RegistroNormalizado::getFechaReporte)
                 .filter(Objects::nonNull)
+                .filter(f -> !f.equals("Sin fecha"))
                 .collect(Collectors.toCollection(TreeSet::new));
 
-        if (fechas.size() > 1) {
-            int r = hoja.getLastRowNum() + 3;
-            Row tituloComp = hoja.createRow(r++);
-            Cell ctc = tituloComp.createCell(0);
-            ctc.setCellValue("Comparativa por fechas");
-            ctc.setCellStyle(estiloSubtitulo);
+        if (fechas.size() <= 1)
+            return;
 
-            Row encComp = hoja.createRow(r++);
-            encComp.createCell(0).setCellValue("Proveedor");
-            int colIdx = 1;
-            List<String> fechasList = new ArrayList<>(fechas);
-            for (String f : fechasList) {
-                Cell c = encComp.createCell(colIdx++);
-                c.setCellValue(f);
-                c.setCellStyle(estiloEncabezado);
+        // --- POSICIÓN ALINEADA A LA DERECHA ---
+        int r = 11; // Fila 12 (donde empiezan los proveedores)
+        int cInicio = 5; // Columna F (justo al lado de Total USD que está en E)
+
+        // Anchos de columna para que no salgan #######
+        hoja.setColumnWidth(cInicio, 4000); // F: PEN (F1)
+        hoja.setColumnWidth(cInicio + 1, 4000); // G: USD (F1)
+        hoja.setColumnWidth(cInicio + 2, 4000); // H: PEN (F2)
+        hoja.setColumnWidth(cInicio + 3, 4000); // I: USD (F2)
+        hoja.setColumnWidth(cInicio + 4, 4000); // J: Dif PEN
+        hoja.setColumnWidth(cInicio + 5, 4000); // K: Dif USD
+
+        // 1. Fila 12: Títulos de Fechas (Colores Claros)
+        Row filaFechas = hoja.getRow(r);
+        if (filaFechas == null)
+            filaFechas = hoja.createRow(r);
+
+        int colIdx = cInicio;
+        List<String> fechasList = new ArrayList<>(fechas);
+        Collections.reverse(fechasList); // Más reciente primero
+
+        // Colores claros para las fechas
+        CellStyle estiloFechaClaro1 = wb.createCellStyle();
+        estiloFechaClaro1.cloneStyleFrom(estiloEncabezado);
+        estiloFechaClaro1.setFillForegroundColor(IndexedColors.PALE_BLUE.getIndex());
+
+        CellStyle estiloFechaClaro2 = wb.createCellStyle();
+        estiloFechaClaro2.cloneStyleFrom(estiloEncabezado);
+        estiloFechaClaro2.setFillForegroundColor(IndexedColors.LIGHT_YELLOW.getIndex());
+
+        for (int i = 0; i < fechasList.size(); i++) {
+            String f = fechasList.get(i);
+            Cell cPen = filaFechas.createCell(colIdx++);
+            cPen.setCellValue(f);
+            cPen.setCellStyle(i == 0 ? estiloFechaClaro1 : estiloFechaClaro2);
+
+            Cell cUsd = filaFechas.createCell(colIdx++);
+            cUsd.setCellValue("");
+            cUsd.setCellStyle(i == 0 ? estiloFechaClaro1 : estiloFechaClaro2);
+
+            hoja.addMergedRegion(new CellRangeAddress(r, r, colIdx - 2, colIdx - 1));
+        }
+
+        // Título Diferencia (Color lavanda claro)
+        CellStyle estiloDif = wb.createCellStyle();
+        estiloDif.cloneStyleFrom(estiloEncabezado);
+        estiloDif.setFillForegroundColor(IndexedColors.LAVENDER.getIndex());
+
+        Cell cDif = filaFechas.createCell(colIdx++);
+        cDif.setCellValue("Diferencia");
+        cDif.setCellStyle(estiloDif);
+        filaFechas.createCell(colIdx).setCellStyle(estiloDif);
+        hoja.addMergedRegion(new CellRangeAddress(r, r, colIdx - 1, colIdx));
+
+        // 2. Fila 13: Subencabezados (Total PEN / Total USD)
+        r++;
+        Row filaSub = hoja.getRow(r);
+        if (filaSub == null)
+            filaSub = hoja.createRow(r);
+
+        colIdx = cInicio;
+        for (int i = 0; i < fechasList.size(); i++) {
+            Cell cPen = filaSub.createCell(colIdx++);
+            cPen.setCellValue("Total PEN");
+            cPen.setCellStyle(estiloEncabezado);
+
+            Cell cUsd = filaSub.createCell(colIdx++);
+            cUsd.setCellValue("Total USD");
+            cUsd.setCellStyle(estiloEncabezado);
+        }
+
+        Cell cDifPen = filaSub.createCell(colIdx++);
+        cDifPen.setCellValue("Total PEN");
+        cDifPen.setCellStyle(estiloEncabezado);
+
+        Cell cDifUsd = filaSub.createCell(colIdx);
+        cDifUsd.setCellValue("Total USD");
+        cDifUsd.setCellStyle(estiloEncabezado);
+
+        // 3. Agrupar datos
+        Map<String, Map<String, Double>> compPen = new LinkedHashMap<>();
+        Map<String, Map<String, Double>> compUsd = new LinkedHashMap<>();
+
+        for (RegistroNormalizado reg : registros) {
+            if (reg.getProveedor() == null)
+                continue;
+            compPen.putIfAbsent(reg.getProveedor(), new HashMap<>());
+            compUsd.putIfAbsent(reg.getProveedor(), new HashMap<>());
+        }
+
+        for (RegistroNormalizado reg : registros) {
+            String prov = reg.getProveedor();
+            if (prov == null)
+                continue;
+            String fecha = reg.getFechaReporte() != null ? reg.getFechaReporte() : "Sin fecha";
+            double saldo = reg.getSaldoMonedaIngresada() != null ? reg.getSaldoMonedaIngresada().doubleValue() : 0;
+
+            if ("PEN".equalsIgnoreCase(reg.getMoneda())) {
+                compPen.get(prov).merge(fecha, saldo, Double::sum);
+            } else if ("USD".equalsIgnoreCase(reg.getMoneda())) {
+                compUsd.get(prov).merge(fecha, saldo, Double::sum);
             }
-            encComp.createCell(colIdx).setCellValue("Diferencia");
-            encComp.getCell(colIdx).setCellStyle(estiloEncabezado);
+        }
 
-            Map<String, Map<String, Double>> compPen = new LinkedHashMap<>();
-            Map<String, Map<String, Double>> compUsd = new LinkedHashMap<>();
+        // 4. Inyectar montos en las filas existentes de los proveedores
+        r++; // Empezamos en la fila 14 (primer proveedor)
 
-            for (RegistroNormalizado reg : registros) {
-                String prov = reg.getProveedor() != null ? reg.getProveedor() : "(sin proveedor)";
-                String fecha = reg.getFechaReporte() != null ? reg.getFechaReporte() : "Desconocida";
-                double saldo = reg.getSaldoMonedaIngresada() != null ? reg.getSaldoMonedaIngresada().doubleValue() : 0;
-                boolean isPen = "PEN".equalsIgnoreCase(reg.getMoneda());
+        // Recorremos las filas hacia abajo hasta que ya no haya proveedores en la
+        // columna C (índice 2)
+        while (hoja.getRow(r) != null && hoja.getRow(r).getCell(2) != null) {
+            Row row = hoja.getRow(r);
+            String provNombre = row.getCell(2).toString().trim();
 
-                if (isPen)
-                    compPen.computeIfAbsent(prov, k -> new HashMap<>()).merge(fecha, saldo, Double::sum);
-                else
-                    compUsd.computeIfAbsent(prov, k -> new HashMap<>()).merge(fecha, saldo, Double::sum);
-            }
+            // Si el proveedor existe en nuestra lista
+            if (compPen.containsKey(provNombre)) {
+                colIdx = cInicio;
+                double pen1 = 0, usd1 = 0, pen2 = 0, usd2 = 0;
 
-            for (Map.Entry<String, Map<String, Double>> entry : compPen.entrySet()) {
-                Row row = hoja.createRow(r++);
-                row.createCell(0).setCellValue(entry.getKey() + " (PEN)");
-                int c = 1;
-                double min = Double.MAX_VALUE, max = -Double.MAX_VALUE;
-                for (String f : fechasList) {
-                    Double val = entry.getValue().getOrDefault(f, 0.0);
-                    Cell cell = row.createCell(c++);
-                    cell.setCellValue(val);
-                    cell.setCellStyle(estiloMoneda);
-                    if (val < min)
-                        min = val;
-                    if (val > max)
-                        max = val;
+                for (int i = 0; i < fechasList.size(); i++) {
+                    String f = fechasList.get(i);
+                    Double p = compPen.getOrDefault(provNombre, new HashMap<>()).getOrDefault(f, 0.0);
+                    Double u = compUsd.getOrDefault(provNombre, new HashMap<>()).getOrDefault(f, 0.0);
+
+                    if (i == 0) {
+                        pen1 = p;
+                        usd1 = u;
+                    }
+                    if (i == 1) {
+                        pen2 = p;
+                        usd2 = u;
+                    }
+
+                    Cell cellP = row.createCell(colIdx++);
+                    cellP.setCellValue(p);
+                    cellP.setCellStyle(estiloMoneda);
+
+                    Cell cellU = row.createCell(colIdx++);
+                    cellU.setCellValue(u);
+                    cellU.setCellStyle(estiloMoneda);
                 }
-                Cell cDif = row.createCell(c);
-                cDif.setCellValue(max - min);
-                cDif.setCellStyle(estiloMoneda);
+
+                // Diferencia (F1 - F2)
+                Cell cDifP = row.createCell(colIdx++);
+                cDifP.setCellValue(pen1 - pen2);
+                cDifP.setCellStyle(estiloMoneda);
+
+                Cell cDifU = row.createCell(colIdx);
+                cDifU.setCellValue(usd1 - usd2);
+                cDifU.setCellStyle(estiloMoneda);
             }
 
-            for (Map.Entry<String, Map<String, Double>> entry : compUsd.entrySet()) {
-                Row row = hoja.createRow(r++);
-                row.createCell(0).setCellValue(entry.getKey() + " (USD)");
-                int c = 1;
-                double min = Double.MAX_VALUE, max = -Double.MAX_VALUE;
-                for (String f : fechasList) {
-                    Double val = entry.getValue().getOrDefault(f, 0.0);
-                    Cell cell = row.createCell(c++);
-                    cell.setCellValue(val);
-                    cell.setCellStyle(estiloMoneda);
-                    if (val < min)
-                        min = val;
-                    if (val > max)
-                        max = val;
-                }
-                Cell cDif = row.createCell(c);
-                cDif.setCellValue(max - min);
-                cDif.setCellStyle(estiloMoneda);
-            }
+            r++;
         }
     }
 
     // ------------------------------------------------------------------ Detalle
-    // (Se mantiene exactamente igual que en tu archivo original)
     private void crearHojaDetalle(Workbook wb, VistaCompleta vista, List<List<Object>> filas,
             CellStyle estiloEncabezado, CellStyle estiloMoneda, CellStyle estiloFecha, CellStyle estiloTexto) {
         Sheet hoja = wb.createSheet("Detalle");
@@ -306,6 +400,7 @@ public class ExportadorExcelService {
 
     // ------------------------------------------------------------------
     // Clasificación
+
     private enum TipoColumna {
         MONEDA, FECHA, TEXTO
     }
@@ -351,10 +446,11 @@ public class ExportadorExcelService {
     }
 
     // ------------------------------------------------------------------ Resumen
-    // (Se mantiene exactamente igual)
+
     private void crearHojaResumen(Workbook wb, VistaCompleta vista, List<List<Object>> filasFiltradas,
             CellStyle estiloTitulo, CellStyle estiloSubtitulo, CellStyle estiloEncabezado, CellStyle estiloMoneda) {
         Sheet hoja = wb.createSheet("Resumen");
+
         int r = 0;
 
         Row t = hoja.createRow(r++);
@@ -384,10 +480,12 @@ public class ExportadorExcelService {
         List<ResumenUnidad> unidades = calcularResumenPorUnidad(vista, filasFiltradas);
         for (ResumenUnidad ru : unidades) {
             Row row = hoja.createRow(r++);
-            row.createCell(0).setCellValue(ru.unidad == null ? "(sin unidad)" : ru.unidad);
+            row.createCell(0).setCellValue(ru.unidad == null ? "" : ru.unidad);
+
             Cell cPen = row.createCell(1);
             cPen.setCellValue(ru.totalPEN.doubleValue());
             cPen.setCellStyle(estiloMoneda);
+
             Cell cUsd = row.createCell(2);
             cUsd.setCellValue(ru.totalUSD.doubleValue());
             cUsd.setCellStyle(estiloMoneda);
@@ -411,12 +509,14 @@ public class ExportadorExcelService {
         List<ResumenProveedorUnidad> proveedores = calcularResumenPorProveedor(vista, filasFiltradas);
         for (ResumenProveedorUnidad rpu : proveedores) {
             Row row = hoja.createRow(r++);
-            row.createCell(0).setCellValue(rpu.unidad == null ? "(sin unidad)" : rpu.unidad);
+            row.createCell(0).setCellValue(rpu.unidad == null ? "" : rpu.unidad);
             row.createCell(1).setCellValue(rpu.ruc == null ? "" : rpu.ruc);
             row.createCell(2).setCellValue(rpu.proveedor == null ? "" : rpu.proveedor);
+
             Cell cPen = row.createCell(3);
             cPen.setCellValue(rpu.totalPEN.doubleValue());
             cPen.setCellStyle(estiloMoneda);
+
             Cell cUsd = row.createCell(4);
             cUsd.setCellValue(rpu.totalUSD.doubleValue());
             cUsd.setCellStyle(estiloMoneda);
@@ -427,19 +527,21 @@ public class ExportadorExcelService {
         }
     }
 
-    private int filaTotales(Sheet hoja, int r, String etiqueta, double valor, CellStyle e1, CellStyle e2) {
+    private int filaTotales(Sheet hoja, int r, String etiqueta, double valor,
+            CellStyle estiloEncabezado, CellStyle estiloMoneda) {
         Row row = hoja.createRow(r);
         Cell c1 = row.createCell(0);
         c1.setCellValue(etiqueta);
-        c1.setCellStyle(e1);
+        c1.setCellStyle(estiloEncabezado);
+
         Cell c2 = row.createCell(1);
         c2.setCellValue(valor);
-        c2.setCellStyle(e2);
+        c2.setCellStyle(estiloMoneda);
+
         return r + 1;
     }
 
     // ------------------------------------------------------------------ Tratado
-    // (Se mantiene exactamente igual, pero ahora agrupa las filas correctamente)
     private void crearHojaTratado(Workbook wb, VistaCompleta vista, List<List<Object>> filasFiltradas,
             CellStyle estiloEncabezado, CellStyle estiloMoneda, CellStyle estiloTexto, CellStyle estiloTotalFila) {
         Sheet hoja = wb.createSheet("Tratado");
@@ -453,14 +555,12 @@ public class ExportadorExcelService {
         int idxSaldoUSD = indiceColumna(vista, new String[] { "saldo usd", "saldo en dolares", "saldo dolares" });
         int idxSaldoPEN = indiceColumna(vista, new String[] { "saldo pen", "saldo soles", "saldo en soles" });
 
-        // Unidades y Proveedores únicos
         TreeSet<String> unidadesSet = new TreeSet<>();
         for (List<Object> fila : filasFiltradas) {
             if (esFilaNull(fila))
                 continue;
-            String u = idxUnidad >= 0 && fila.get(idxUnidad) != null ? fila.get(idxUnidad).toString().trim()
-                    : "(sin unidad)";
-            if (!u.isEmpty())
+            String u = idxUnidad >= 0 && fila.get(idxUnidad) != null ? fila.get(idxUnidad).toString().trim() : "";
+            if (!u.isEmpty() && !u.equalsIgnoreCase("(sin unidad)"))
                 unidadesSet.add(u);
         }
         List<String> unidades = new ArrayList<>(unidadesSet);
@@ -473,26 +573,23 @@ public class ExportadorExcelService {
             String ruc = idxRuc >= 0 && fila.get(idxRuc) != null ? fila.get(idxRuc).toString().trim() : "";
             String prov = idxProveedor >= 0 && fila.get(idxProveedor) != null ? fila.get(idxProveedor).toString().trim()
                     : "";
-            String clave = !ruc.isEmpty() ? ruc : (!prov.isEmpty() ? prov.toUpperCase(Locale.ROOT) : "(sin proveedor)");
+            String clave = !ruc.isEmpty() ? ruc : (!prov.isEmpty() ? prov.toUpperCase(Locale.ROOT) : "");
             if (prov.isEmpty() && ruc.isEmpty())
-                prov = "(sin proveedor)";
+                continue;
             proveedoresSet.add(clave);
             proveedorNombre.putIfAbsent(clave, prov);
         }
         List<String> proveedores = new ArrayList<>(proveedoresSet);
 
-        // Agrupación
         Map<String, BigDecimal[]> acumulado = new LinkedHashMap<>();
         for (List<Object> fila : filasFiltradas) {
             if (esFilaNull(fila))
                 continue;
-            String unidad = idxUnidad >= 0 && fila.get(idxUnidad) != null ? fila.get(idxUnidad).toString().trim()
-                    : "(sin unidad)";
+            String unidad = idxUnidad >= 0 && fila.get(idxUnidad) != null ? fila.get(idxUnidad).toString().trim() : "";
             String ruc = idxRuc >= 0 && fila.get(idxRuc) != null ? fila.get(idxRuc).toString().trim() : "";
             String prov = idxProveedor >= 0 && fila.get(idxProveedor) != null ? fila.get(idxProveedor).toString().trim()
                     : "";
-            String claveProv = !ruc.isEmpty() ? ruc
-                    : (!prov.isEmpty() ? prov.toUpperCase(Locale.ROOT) : "(sin proveedor)");
+            String claveProv = !ruc.isEmpty() ? ruc : (!prov.isEmpty() ? prov.toUpperCase(Locale.ROOT) : "");
 
             String clave = unidad + "||" + claveProv;
             BigDecimal[] acc = acumulado.computeIfAbsent(clave,
@@ -521,7 +618,6 @@ public class ExportadorExcelService {
         int cTotalUsd = colInicial + unidades.size() * 2;
         int cTotalPen = cTotalUsd + 1;
 
-        // Fila 0
         Row fila0 = hoja.createRow(0);
         Cell cEtiqueta0 = fila0.createCell(0);
         cEtiqueta0.setCellValue("Etiquetas de fila");
@@ -542,7 +638,6 @@ public class ExportadorExcelService {
         ctp.setCellValue("Total Suma de Total PEN");
         ctp.setCellStyle(estiloEncabezado);
 
-        // Fila 1
         Row fila1 = hoja.createRow(1);
         fila1.createCell(0).setCellStyle(estiloEncabezado);
         for (int u = 0; u < unidades.size(); u++) {
@@ -561,7 +656,6 @@ public class ExportadorExcelService {
         totPen.setCellValue("Total Suma de Total PEN");
         totPen.setCellStyle(estiloEncabezado);
 
-        // Datos
         int r = 2;
         BigDecimal[] totalesPorColumna = new BigDecimal[totalCols];
         for (int i = 0; i < totalCols; i++)
@@ -620,11 +714,9 @@ public class ExportadorExcelService {
             c.setCellStyle(estiloTotalFila);
         }
 
-        // EL ANCHO CORRECTO PARA QUE NO SE DESBORDE NADA
-        hoja.setColumnWidth(0, 10000); // Proveedor ancho
-        for (int i = 1; i < totalCols; i++) {
-            hoja.setColumnWidth(i, 4500); // Columnas de dinero parejas
-        }
+        hoja.setColumnWidth(0, 10000);
+        for (int i = 1; i < totalCols; i++)
+            hoja.setColumnWidth(i, 4500);
         hoja.createFreezePane(1, 2);
     }
 
@@ -679,8 +771,10 @@ public class ExportadorExcelService {
         for (List<Object> fila : filas) {
             if (esFilaNull(fila))
                 continue;
-            String unidad = idxUnidad >= 0 && fila.get(idxUnidad) != null ? fila.get(idxUnidad).toString().trim()
-                    : "(sin unidad)";
+            String unidad = idxUnidad >= 0 && fila.get(idxUnidad) != null ? fila.get(idxUnidad).toString().trim() : "";
+            if (unidad.isEmpty())
+                continue;
+
             ResumenUnidad ru = mapa.computeIfAbsent(unidad, ResumenUnidad::new);
             String moneda = idxMoneda >= 0 && fila.get(idxMoneda) != null
                     ? fila.get(idxMoneda).toString().toUpperCase(Locale.ROOT)
@@ -718,17 +812,20 @@ public class ExportadorExcelService {
         for (List<Object> fila : filas) {
             if (esFilaNull(fila))
                 continue;
-            String unidad = idxUnidad >= 0 && fila.get(idxUnidad) != null ? fila.get(idxUnidad).toString().trim()
-                    : "(sin unidad)";
+            String unidad = idxUnidad >= 0 && fila.get(idxUnidad) != null ? fila.get(idxUnidad).toString().trim() : "";
             String ruc = idxRuc >= 0 && fila.get(idxRuc) != null ? fila.get(idxRuc).toString().trim() : "";
             String prov = idxProveedor >= 0 && fila.get(idxProveedor) != null ? fila.get(idxProveedor).toString().trim()
                     : "";
+
+            if (unidad.isEmpty() || (ruc.isEmpty() && prov.isEmpty()))
+                continue;
+
             String proveedorClave = !ruc.isEmpty() ? "RUC:" + ruc
-                    : (!prov.isEmpty() ? "NOMBRE:" + prov.toUpperCase(Locale.ROOT) : "SIN");
+                    : (!prov.isEmpty() ? "NOMBRE:" + prov.toUpperCase(Locale.ROOT) : "");
             String clave = unidad + "||" + proveedorClave;
 
             ResumenProveedorUnidad rpu = mapa.computeIfAbsent(clave,
-                    k -> new ResumenProveedorUnidad(unidad, ruc, prov.isEmpty() ? "(sin proveedor)" : prov));
+                    k -> new ResumenProveedorUnidad(unidad, ruc, prov));
             String moneda = idxMoneda >= 0 && fila.get(idxMoneda) != null
                     ? fila.get(idxMoneda).toString().toUpperCase(Locale.ROOT)
                     : "";
@@ -774,9 +871,12 @@ public class ExportadorExcelService {
         if (s == null)
             return "";
         return s.toLowerCase(Locale.ROOT)
-                .replaceAll("[áàäâ]", "a").replaceAll("[éèëê]", "e")
-                .replaceAll("[íìïî]", "i").replaceAll("[óòöô]", "o")
-                .replaceAll("[úùüû]", "u").replaceAll("[^a-z0-9]+", " ")
+                .replaceAll("[áàäâ]", "a")
+                .replaceAll("[éèëê]", "e")
+                .replaceAll("[íìïî]", "i")
+                .replaceAll("[óòöô]", "o")
+                .replaceAll("[úùüû]", "u")
+                .replaceAll("[^a-z0-9]+", " ")
                 .trim();
     }
 
