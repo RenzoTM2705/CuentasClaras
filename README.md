@@ -20,14 +20,14 @@ Es una herramienta **exclusivamente visual y expositiva**. No edita documentos f
 
 | Fase | Estado |
 |---|---|
-| Fase 1 — Fundación | ✅ |
-| Fase 2 — Modelo en memoria y contrato API | ✅ |
-| Fase 3 — Importación inteligente de Excel | ✅ |
-| Fase 4 — Combinación y deduplicación | ✅ |
-| Fase 5 — Selector visual de vistas | ✅ |
-| Fase 6 — Análisis financiero | ⏳ pendiente |
-| Fase 7 — Exportación | ⏳ pendiente |
-| Fase 8 — Pruebas y despliegue | ⏳ pendiente |
+| Fase 1 — Fundación | OK |
+| Fase 2 — Modelo en memoria y contrato API | OK |
+| Fase 3 — Importación inteligente de Excel | OK |
+| Fase 4 — Combinación y deduplicación | OK |
+| Fase 5 — Selector visual de vistas | OK |
+| Fase 6 — Análisis financiero | OK |
+| Fase 7 — Exportación | OK |
+| Fase 8 — Pruebas y despliegue | OK |
 
 Ver `CHANGELOG.md` para el detalle por fase.
 
